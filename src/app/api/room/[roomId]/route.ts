@@ -13,8 +13,16 @@ export async function GET(
     return NextResponse.json({ error: "Salle introuvable" }, { status: 404 });
   }
   const players = await getPlayersInRoom(roomId);
-  return NextResponse.json({
-    ...room,
-    players: players.map((p) => ({ id: p.id, name: p.name })),
-  });
+  return NextResponse.json(
+    {
+      ...room,
+      players: players.map((p) => ({ id: p.id, name: p.name })),
+    },
+    {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate",
+        Pragma: "no-cache",
+      },
+    }
+  );
 }

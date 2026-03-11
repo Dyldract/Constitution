@@ -177,7 +177,8 @@ function RoomPageContent() {
             : prev
         );
       }
-      await fetchRoom();
+      // Ne pas appeler fetchRoom() ici : en prod (Vercel) le GET peut être en cache
+      // et écraser la phase qu'on vient de mettre à jour. Le polling (3s) resynchronisera.
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erreur");
     } finally {
