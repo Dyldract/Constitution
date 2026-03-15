@@ -106,10 +106,15 @@ async function generateCode(): Promise<string> {
   return code;
 }
 
-/** Détecte si l'erreur vient du cache schéma PostgREST (colonne is_public inconnue) */
+/** Détecte si l'erreur vient du cache schéma PostgREST (colonne inconnue) */
 function isSchemaCacheError(err: { message?: string }): boolean {
   const m = (err?.message ?? "").toLowerCase();
-  return m.includes("schema cache") || m.includes("is_public");
+  return (
+    m.includes("schema cache") ||
+    m.includes("is_public") ||
+    m.includes("result_amendments") ||
+    m.includes("result_articles")
+  );
 }
 
 export async function createRoom(constitutionName: string, isPublic: boolean = false): Promise<Room> {
@@ -117,43 +122,45 @@ export async function createRoom(constitutionName: string, isPublic: boolean = f
   const name = (constitutionName || "Constitution").toString().trim() || "Constitution";
   const resultAmendments = Array(AMENDMENTS_COUNT).fill(null);
 
-  const payload = {
+  const fullPayload = {
     code,
     phase: "amendments",
+    is_public: isPublic,
     result_name: name,
     result_articles: [],
     result_amendments: resultAmendments,
     preamble: null,
   };
 
-  // Essai avec is_public (comportement normal)
+  // Essai insert complet
   let result = await getSupabase()
     .from("rooms")
-    .insert({ ...payload, is_public: isPublic })
+    .insert(fullPayload)
     .select()
     .single();
 
-  // Si erreur cache schéma, insérer sans is_public (défaut DB = false) puis mettre à jour
-  if (result.error && isSchemaCacheError(result.error)) {
-    const insertWithout = await getSupabase()
-      .from("rooms")
-      .insert(payload)
-      .select()
-      .single();
-    if (insertWithout.error) throw insertWithout.error;
-    const room = rowToRoom(insertWithout.data as RoomRow);
-    if (isPublic) {
-      const { error: updateErr } = await getSupabase()
-        .from("rooms")
-        .update({ is_public: true })
-        .eq("id", room.id);
-      if (!updateErr) return { ...room, isPublic: true };
-    }
-    return room;
-  }
+  if (!result.error) return rowToRoom(result.data as RoomRow);
 
-  if (result.error) throw result.error;
-  return rowToRoom(result.data as RoomRow);
+  // Sinon fallback : insert sans colonnes inconnues du cache (is_public, result_articles, result_amendments)
+  if (!isSchemaCacheError(result.error)) throw result.error;
+
+  const minimalPayload = { code, phase: "amendments", result_name: name, preamble: null };
+  const fallback = await getSupabase()
+    .from("rooms")
+    .insert(minimalPayload)
+    .select()
+    .single();
+  if (fallback.error) throw fallback.error;
+
+  const room = rowToRoom(fallback.data as RoomRow);
+  if (isPublic) {
+    const { error: updateErr } = await getSupabase()
+      .from("rooms")
+      .update({ is_public: true })
+      .eq("id", room.id);
+    if (!updateErr) return { ...room, isPublic: true };
+  }
+  return room;
 }
 
 /** Salles publiques avec nombre de participants */
