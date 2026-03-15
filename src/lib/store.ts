@@ -1,7 +1,7 @@
 import { nanoid } from "nanoid";
 import { getSupabase } from "./supabase";
-import type { Room, Player, Proposal, Vote, ProposalType } from "./types";
-import { ARTICLES_COUNT, AMENDMENTS_COUNT } from "./types";
+import type { Room, Player, Proposal, Vote, ProposalType, ChatMessage } from "./types";
+import { AMENDMENTS_COUNT } from "./types";
 
 // Types pour les lignes Supabase (snake_case + index_)
 type RoomRow = {
@@ -9,6 +9,7 @@ type RoomRow = {
   code: string;
   phase: string;
   created_at: string;
+  is_public: boolean;
   result_name: string;
   result_articles: (string | null)[];
   result_amendments: (string | null)[];
@@ -19,9 +20,11 @@ type ProposalRow = {
   id: string;
   room_id: string;
   type: string;
-  index_: number;
+  index?: number;
+  index_?: number;
   text: string;
-  author_id: string;
+  author_id?: string;
+  author_name?: string;
   created_at: string;
 };
 type VoteRow = {
@@ -29,29 +32,31 @@ type VoteRow = {
   room_id: string;
   player_id: string;
   type: string;
-  index_: number;
+  index?: number;
+  index_?: number;
   value: boolean;
   created_at: string;
 };
 
-/** Normalise la phase lue depuis la DB (casse ou clé différente possible avec PostgREST) */
+/** Normalise la phase lue depuis la DB */
 function normalizePhase(raw: unknown): Room["phase"] {
   const s = String(raw ?? "").toLowerCase();
-  if (s === "amendments") return "amendments";
   if (s === "done") return "done";
-  return "articles";
+  return "amendments";
 }
 
 function rowToRoom(r: RoomRow): Room {
   const raw = (r as Record<string, unknown>).phase ?? (r as Record<string, unknown>).Phase;
+  const isPublic = (r as Record<string, unknown>).is_public === true;
   return {
     id: r.id,
     code: r.code,
     phase: normalizePhase(raw),
     createdAt: new Date(r.created_at).getTime(),
+    isPublic: Boolean(isPublic),
     resultName: r.result_name,
-    resultArticles: r.result_articles,
-    resultAmendments: r.result_amendments,
+    resultArticles: r.result_articles ?? [],
+    resultAmendments: r.result_amendments ?? [],
     preamble: r.preamble,
   };
 }
@@ -64,23 +69,28 @@ function rowToPlayer(r: PlayerRow): Player {
   };
 }
 function rowToProposal(r: ProposalRow): Proposal {
+  const idx = r.index ?? r.index_;
+  const authorId = (r as Record<string, unknown>).author_id ?? "";
+  const authorName = (r as Record<string, unknown>).author_name as string | undefined;
   return {
     id: r.id,
     roomId: r.room_id,
     type: r.type as Proposal["type"],
-    index: r.index_,
+    index: typeof idx === "number" ? idx : 0,
     text: r.text,
-    authorId: r.author_id,
+    authorId: String(authorId),
+    authorName: authorName ?? undefined,
     createdAt: new Date(r.created_at).getTime(),
   };
 }
 function rowToVote(r: VoteRow): Vote {
+  const idx = r.index ?? r.index_;
   return {
     id: r.id,
     roomId: r.room_id,
     playerId: r.player_id,
     type: r.type as Vote["type"],
-    index: r.index_,
+    index: typeof idx === "number" ? idx : 0,
     value: r.value,
     createdAt: new Date(r.created_at).getTime(),
   };
@@ -96,11 +106,10 @@ async function generateCode(): Promise<string> {
   return code;
 }
 
-export async function createRoom(constitutionName: string): Promise<Room> {
+export async function createRoom(constitutionName: string, isPublic: boolean = false): Promise<Room> {
   const id = nanoid();
   const code = await generateCode();
   const name = (constitutionName || "Constitution").toString().trim() || "Constitution";
-  const resultArticles = Array(ARTICLES_COUNT).fill(null);
   const resultAmendments = Array(AMENDMENTS_COUNT).fill(null);
 
   const { data, error } = await getSupabase()
@@ -108,9 +117,10 @@ export async function createRoom(constitutionName: string): Promise<Room> {
     .insert({
       id,
       code,
-      phase: "articles",
+      phase: "amendments",
+      is_public: isPublic,
       result_name: name,
-      result_articles: resultArticles,
+      result_articles: [],
       result_amendments: resultAmendments,
       preamble: null,
     })
@@ -118,14 +128,45 @@ export async function createRoom(constitutionName: string): Promise<Room> {
     .single();
 
   if (error) throw error;
-  // Forcer phase = articles juste après création (annule tout défaut/trigger en base)
   await getSupabase()
     .from("rooms")
-    .update({ phase: "articles" })
+    .update({ phase: "amendments" })
     .eq("id", id)
     .select("id")
     .single();
-  return rowToRoom({ ...(data as RoomRow), phase: "articles" });
+  return rowToRoom({ ...(data as RoomRow), phase: "amendments" });
+}
+
+/** Salles publiques avec nombre de participants */
+export async function getPublicRooms(): Promise<
+  { id: string; code: string; resultName: string; phase: Room["phase"]; playersCount: number }[]
+> {
+  const { data: rooms, error: roomsError } = await getSupabase()
+    .from("rooms")
+    .select("id, code, result_name, phase")
+    .eq("is_public", true)
+    .order("created_at", { ascending: false });
+  if (roomsError) throw roomsError;
+  if (!rooms?.length) return [];
+  const ids = rooms.map((r: { id: string }) => r.id);
+  const { data: counts } = await getSupabase()
+    .from("players")
+    .select("room_id")
+    .in("room_id", ids);
+  const countByRoom: Record<string, number> = {};
+  for (const id of ids) countByRoom[id] = 0;
+  for (const row of counts ?? []) {
+    const rid = (row as { room_id: string }).room_id;
+    if (rid in countByRoom) countByRoom[rid]++;
+  }
+  type PublicRoomRow = { id: string; code: string; result_name: string; phase: string };
+  return (rooms as PublicRoomRow[]).map((r) => ({
+    id: r.id,
+    code: r.code,
+    resultName: r.result_name,
+    phase: normalizePhase(r.phase),
+    playersCount: countByRoom[r.id] ?? 0,
+  }));
 }
 
 export async function getRoomById(id: string): Promise<Room | null> {
@@ -186,18 +227,18 @@ export async function addProposal(
 ): Promise<Proposal> {
   const room = await getRoomById(roomId);
   if (!room) throw new Error("Salle introuvable");
-  const id = nanoid();
+  const player = await getPlayer(authorId);
+  const authorName = player?.name ?? "Anonyme";
   const cleanText = text.trim();
 
   const { data, error } = await getSupabase()
     .from("proposals")
     .insert({
-      id,
       room_id: roomId,
       type,
-      index_: index,
+      index,
       text: cleanText,
-      author_id: authorId,
+      author_name: authorName,
     })
     .select()
     .single();
@@ -217,7 +258,7 @@ export async function getProposals(
     .eq("room_id", roomId)
     .eq("type", type)
     .order("created_at", { ascending: true });
-  if (index !== undefined) query = query.eq("index_", index);
+  if (index !== undefined) query = query.eq("index", index);
   const { data, error } = await query;
   if (error) throw error;
   return (data ?? []).map((r) => rowToProposal(r as ProposalRow));
@@ -246,14 +287,14 @@ export async function setVote(
   await getSupabase()
     .from("votes")
     .delete()
-    .match({ room_id: roomId, player_id: playerId, type, index_: index });
+    .match({ room_id: roomId, player_id: playerId, type, index });
 
   const { error } = await getSupabase().from("votes").insert({
     id: nanoid(),
     room_id: roomId,
     player_id: playerId,
     type,
-    index_: index,
+    index,
     value,
   });
   if (error) throw error;
@@ -270,7 +311,7 @@ export async function getVotes(
     .eq("room_id", roomId)
     .eq("type", type)
     .order("created_at", { ascending: true });
-  if (index !== undefined) query = query.eq("index_", index);
+  if (index !== undefined) query = query.eq("index", index);
   const { data, error } = await query;
   if (error) throw error;
   return (data ?? []).map((r) => rowToVote(r as VoteRow));
@@ -344,4 +385,51 @@ export async function getPlayer(playerId: string): Promise<Player | null> {
     throw error;
   }
   return data ? rowToPlayer(data as PlayerRow) : null;
+}
+
+// --- Chat ---
+type ChatMessageRow = { id: string; room_id: string; player_id: string; text: string; created_at: string };
+
+export async function addChatMessage(roomId: string, playerId: string, text: string): Promise<ChatMessage> {
+  const id = nanoid();
+  const { data, error } = await getSupabase()
+    .from("chat_messages")
+    .insert({ id, room_id: roomId, player_id: playerId, text: text.trim() })
+    .select()
+    .single();
+  if (error) throw error;
+  const row = data as ChatMessageRow;
+  const player = await getPlayer(playerId);
+  return {
+    id: row.id,
+    roomId: row.room_id,
+    playerId: row.player_id,
+    playerName: player?.name,
+    text: row.text,
+    createdAt: new Date(row.created_at).getTime(),
+  };
+}
+
+export async function getChatMessages(roomId: string): Promise<ChatMessage[]> {
+  const { data: rows, error } = await getSupabase()
+    .from("chat_messages")
+    .select("*")
+    .eq("room_id", roomId)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  if (!rows?.length) return [];
+  const playerIds = Array.from(new Set((rows as ChatMessageRow[]).map((r) => r.player_id)));
+  const players = await Promise.all(playerIds.map((id) => getPlayer(id)));
+  const nameById: Record<string, string> = {};
+  playerIds.forEach((id, i) => {
+    nameById[id] = players[i]?.name ?? "?";
+  });
+  return (rows as ChatMessageRow[]).map((r) => ({
+    id: r.id,
+    roomId: r.room_id,
+    playerId: r.player_id,
+    playerName: nameById[r.player_id],
+    text: r.text,
+    createdAt: new Date(r.created_at).getTime(),
+  }));
 }

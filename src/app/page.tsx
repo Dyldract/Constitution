@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
+
+type PublicRoom = { id: string; code: string; resultName: string; phase: string; playersCount: number };
 
 export default function HomePage() {
   const router = useRouter();
@@ -10,8 +12,26 @@ export default function HomePage() {
   const [playerName, setPlayerName] = useState("");
   const [hostName, setHostName] = useState("");
   const [constitutionName, setConstitutionName] = useState("");
+  const [isPublic, setIsPublic] = useState(false);
   const [error, setError] = useState("");
+  const [publicRooms, setPublicRooms] = useState<PublicRoom[]>([]);
+  const [joiningRoomCode, setJoiningRoomCode] = useState<string | null>(null);
+  const [joinName, setJoinName] = useState("");
   const createSubmitted = useRef(false);
+
+  useEffect(() => {
+    fetch("/api/rooms", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((data) => setPublicRooms(data.rooms ?? []))
+      .catch(() => {});
+    const t = setInterval(() => {
+      fetch("/api/rooms", { cache: "no-store" })
+        .then((r) => r.json())
+        .then((data) => setPublicRooms(data.rooms ?? []))
+        .catch(() => {});
+    }, 8000);
+    return () => clearInterval(t);
+  }, []);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -36,6 +56,7 @@ export default function HomePage() {
         body: JSON.stringify({
           constitutionName: name,
           playerName: host,
+          isPublic,
         }),
       });
       const data = await res.json();
@@ -101,14 +122,92 @@ export default function HomePage() {
     }
   }
 
+  async function handleJoinPublicRoom(e: React.FormEvent) {
+    e.preventDefault();
+    const name = joinName.trim();
+    if (!name || !joiningRoomCode) return;
+    setError("");
+    try {
+      const res = await fetch("/api/room/join", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: joiningRoomCode, playerName: name }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Impossible de rejoindre");
+      if (!data.roomId || !data.playerId) throw new Error("Connexion échouée");
+      setJoiningRoomCode(null);
+      setJoinName("");
+      router.push(`/room?roomId=${data.roomId}&playerId=${data.playerId}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Impossible de rejoindre");
+    }
+  }
+
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-gradient-to-b from-slate-900 to-slate-950">
+    <div className="min-h-screen flex flex-col lg:flex-row p-6 bg-gradient-to-b from-slate-900 to-slate-950 gap-8">
+      {/* Liste des salles publiques à gauche */}
+      <aside className="w-full lg:w-72 flex-shrink-0 order-2 lg:order-1">
+        <h2 className="text-lg font-semibold text-slate-200 mb-3">Salles publiques</h2>
+        {publicRooms.length === 0 ? (
+          <p className="text-slate-500 text-sm">Aucune salle publique pour le moment.</p>
+        ) : (
+          <ul className="space-y-2">
+            {publicRooms.map((room) => (
+              <li key={room.id} className="card py-3">
+                <div className="flex flex-col gap-2">
+                  <span className="font-medium text-white truncate" title={room.resultName}>
+                    {room.resultName}
+                  </span>
+                  <span className="text-slate-400 text-sm">
+                    {room.playersCount} participant{room.playersCount !== 1 ? "s" : ""}
+                  </span>
+                  {joiningRoomCode === room.code ? (
+                    <form onSubmit={handleJoinPublicRoom} className="flex gap-2 mt-1">
+                      <input
+                        type="text"
+                        placeholder="Votre nom"
+                        value={joinName}
+                        onChange={(e) => setJoinName(e.target.value)}
+                        className="input text-sm py-1.5"
+                        autoFocus
+                      />
+                      <div className="flex gap-1">
+                        <button type="submit" className="btn btn-primary text-sm py-1.5">
+                          OK
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setJoiningRoomCode(null); setJoinName(""); setError(""); }}
+                          className="btn btn-secondary text-sm py-1.5"
+                        >
+                          Annuler
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setJoiningRoomCode(room.code)}
+                      className="btn btn-secondary text-sm w-full mt-1"
+                    >
+                      Rejoindre
+                    </button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </aside>
+
+      <div className="flex-1 flex flex-col items-center justify-center min-w-0 order-1 lg:order-2">
       <div className="text-center mb-10">
         <h1 className="text-4xl font-bold text-white mb-2 font-serif">
           Vote Constitution
         </h1>
         <p className="text-slate-400">
-          10 articles, 100 amendements · Vote oui/non · Préambule généré automatiquement
+          100 amendements · Vote oui/non · Chat · Préambule généré automatiquement
         </p>
       </div>
 
@@ -139,6 +238,15 @@ export default function HomePage() {
             disabled={creating}
             autoComplete="off"
           />
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={isPublic}
+              onChange={(e) => setIsPublic(e.target.checked)}
+              className="rounded border-slate-600"
+            />
+            <span className="text-sm text-slate-400">Rendre la salle publique (visible dans la liste)</span>
+          </label>
           <button
             type="submit"
             disabled={creating}
@@ -147,7 +255,7 @@ export default function HomePage() {
             {creating ? "Création…" : "Créer une salle"}
           </button>
           <p className="text-sm text-slate-400 text-center">
-            Le nom est choisi par vous. Les autres rejoignent avec le code.
+            Le nom est choisi par vous. Les autres rejoignent avec le code ou via la liste.
           </p>
         </form>
 
@@ -180,6 +288,7 @@ export default function HomePage() {
         {error && (
           <p className="text-red-400 text-sm text-center">{error}</p>
         )}
+      </div>
       </div>
     </div>
   );

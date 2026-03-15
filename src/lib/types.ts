@@ -1,6 +1,6 @@
-export type Phase = "articles" | "amendments" | "done";
+export type Phase = "amendments" | "done";
 
-export type ProposalType = "article" | "amendment";
+export type ProposalType = "amendment";
 
 export interface Player {
   id: string;
@@ -13,10 +13,12 @@ export interface Proposal {
   id: string;
   roomId: string;
   type: ProposalType;
-  /** Pour article: index 0-9, pour amendment: index 0-99 */
+  /** index 0..99 pour amendment */
   index: number;
   text: string;
   authorId: string;
+  /** Nom de l'auteur (si la table n'a que author_name) */
+  authorName?: string;
   createdAt: number;
 }
 
@@ -36,6 +38,7 @@ export interface Room {
   code: string;
   phase: Phase;
   createdAt: number;
+  isPublic: boolean;
   /** Nom choisi par le créateur à la création */
   resultName: string | null;
   resultArticles: (string | null)[];
@@ -43,5 +46,13 @@ export interface Room {
   preamble: string | null;
 }
 
-export const ARTICLES_COUNT = 10;
+export interface ChatMessage {
+  id: string;
+  roomId: string;
+  playerId: string;
+  playerName?: string;
+  text: string;
+  createdAt: number;
+}
+
 export const AMENDMENTS_COUNT = 100;

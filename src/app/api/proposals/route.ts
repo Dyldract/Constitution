@@ -18,7 +18,7 @@ export async function GET(req: Request) {
   if (indexStr != null && (isNaN(index!) || index! < 0)) {
     return NextResponse.json({ error: "index invalide" }, { status: 400 });
   }
-  const list = await getProposals(roomId, type || "article", index);
+  const list = await getProposals(roomId, (type as ProposalType) || "amendment", index);
   return NextResponse.json({ proposals: list });
 }
 
@@ -32,8 +32,8 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
-    if (type !== "article" && type !== "amendment") {
-      return NextResponse.json({ error: "type doit être article ou amendment" }, { status: 400 });
+    if (type !== "amendment") {
+      return NextResponse.json({ error: "type doit être amendment" }, { status: 400 });
     }
     const room = await getRoomById(roomId);
     if (!room) {

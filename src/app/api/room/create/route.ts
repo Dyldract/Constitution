@@ -3,7 +3,7 @@ import { createRoom, addPlayer } from "@/lib/store";
 
 export async function POST(req: Request) {
   try {
-    let body: { playerName?: string; constitutionName?: string } = {};
+    let body: { playerName?: string; constitutionName?: string; isPublic?: boolean } = {};
     try {
       body = await req.json();
     } catch {
@@ -11,8 +11,9 @@ export async function POST(req: Request) {
     }
     const constitutionName = (body.constitutionName ?? "").toString().trim() || "Constitution";
     const playerName = (body.playerName ?? "Hôte").toString().trim() || "Hôte";
+    const isPublic = body.isPublic === true;
 
-    const room = await createRoom(constitutionName);
+    const room = await createRoom(constitutionName, isPublic);
     const player = await addPlayer(room.id, playerName);
 
     // Vérifier que la salle a bien été créée

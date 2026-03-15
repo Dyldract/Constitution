@@ -1,12 +1,10 @@
 import type { Room } from "./types";
-import { ARTICLES_COUNT, AMENDMENTS_COUNT } from "./types";
 
 /**
- * Génère le préambule de la constitution à partir du nom, des articles et amendements adoptés.
+ * Génère le préambule à partir du nom et des amendements adoptés.
  */
 export function generatePreamble(room: Room): string {
   const name = room.resultName || "Constitution";
-  const articles = room.resultArticles.filter(Boolean) as string[];
   const amendments = room.resultAmendments.filter(Boolean) as string[];
 
   const date = new Date().toLocaleDateString("fr-FR", {
@@ -18,17 +16,12 @@ export function generatePreamble(room: Room): string {
 
   const intro = `Le peuple souverain, réuni pour fonder les bases de la nation, proclame solennellement la présente ${name}.`;
 
-  const articlesSummary =
-    articles.length > 0
-      ? `\n\nLes principes fondamentaux, en ${articles.length} articles, établissent les droits et devoirs des citoyens, l'organisation des pouvoirs et les valeurs communes.`
-      : "";
-
   const amendmentsSummary =
     amendments.length > 0
       ? `\n\n${amendments.length} amendement${amendments.length > 1 ? "s" : ""} complètent et précisent le cadre constitutionnel, afin d'assurer son adaptation et sa pérennité.`
-      : "";
+      : "\n\nLes amendements adoptés par le peuple en précisent les principes et les modalités.";
 
   const closing = `\n\nAdoptée le ${date}, cette constitution est la loi suprême de la nation. En foi de quoi, les représentants du peuple l'ont établie et promulguée.`;
 
-  return intro + articlesSummary + amendmentsSummary + closing;
+  return intro + amendmentsSummary + closing;
 }

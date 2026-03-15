@@ -7,7 +7,7 @@ import {
   setRoomPhase,
 } from "@/lib/store";
 import { generatePreamble } from "@/lib/preamble";
-import { ARTICLES_COUNT, AMENDMENTS_COUNT } from "@/lib/types";
+import { AMENDMENTS_COUNT } from "@/lib/types";
 
 function isAdopted(votes: { value: boolean }[]): boolean {
   if (votes.length === 0) return false;
@@ -24,22 +24,6 @@ export async function POST(
     const room = await getRoomById(roomId);
     if (!room) {
       return NextResponse.json({ error: "Salle introuvable" }, { status: 404 });
-    }
-
-    if (room.phase === "articles") {
-      const resultArticles: (string | null)[] = [];
-      for (let i = 0; i < ARTICLES_COUNT; i++) {
-        const proposal = await getLatestProposal(roomId, "article", i);
-        const voteList = await getVotes(roomId, "article", i);
-        if (proposal && isAdopted(voteList)) {
-          resultArticles.push(proposal.text);
-        } else {
-          resultArticles.push(null);
-        }
-      }
-      await setRoomResults(roomId, { resultArticles });
-      await setRoomPhase(roomId, "amendments");
-      return NextResponse.json({ phase: "amendments", resultArticles });
     }
 
     if (room.phase === "amendments") {

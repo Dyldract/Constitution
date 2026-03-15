@@ -3,8 +3,8 @@
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { ARTICLES_COUNT, AMENDMENTS_COUNT } from "@/lib/types";
-import type { Room as RoomType, Proposal } from "@/lib/types";
+import { AMENDMENTS_COUNT } from "@/lib/types";
+import type { Room as RoomType, Proposal, ChatMessage } from "@/lib/types";
 
 type Phase = RoomType["phase"];
 
@@ -19,10 +19,12 @@ function RoomPageContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [roomNotFound, setRoomNotFound] = useState(false);
-  const [newArticle, setNewArticle] = useState<Record<number, string>>({});
   const [newAmendment, setNewAmendment] = useState<Record<number, string>>({});
   const [closing, setClosing] = useState(false);
   const [votingKey, setVotingKey] = useState<string | null>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [sendingChat, setSendingChat] = useState(false);
 
   const fetchRoom = useCallback(async () => {
     if (!roomId || roomNotFound) return;
@@ -44,8 +46,7 @@ function RoomPageContent() {
       // Ne pas écraser par une phase "en arrière" (ex. cache renvoie "articles" alors qu'on est en "amendments")
       setRoom((prev) => {
         if (!prev) return data;
-        const order = (p: string) =>
-          p === "done" ? 2 : p === "amendments" ? 1 : 0;
+        const order = (p: string) => (p === "done" ? 2 : 1);
         if (order(data.phase) < order(prev.phase)) return prev;
         return data;
       });
@@ -61,7 +62,7 @@ function RoomPageContent() {
   }, [roomId, roomNotFound]);
 
   const fetchProposals = useCallback(
-    async (type: "article" | "amendment", index?: number) => {
+    async (type: "amendment", index?: number) => {
       if (!roomId) return;
       const url =
         `/api/proposals?roomId=${roomId}&type=${type}` +
@@ -98,19 +99,32 @@ function RoomPageContent() {
 
   useEffect(() => {
     if (!room) return;
-    if (room.phase === "articles") {
-      for (let i = 0; i < ARTICLES_COUNT; i++) fetchProposals("article", i);
-    }
     if (room.phase === "amendments") {
       for (let i = 0; i < AMENDMENTS_COUNT; i++) fetchProposals("amendment", i);
     }
   }, [room?.phase, roomId, fetchProposals]);
 
-  async function addProposal(
-    type: "article" | "amendment",
-    index: number,
-    text: string
-  ) {
+  const fetchChat = useCallback(async () => {
+    if (!roomId) return;
+    try {
+      const res = await fetch(`/api/room/${roomId}/chat`, { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        setChatMessages(data.messages ?? []);
+      }
+    } catch {
+      // ignore
+    }
+  }, [roomId]);
+
+  useEffect(() => {
+    if (!roomId || (room?.phase !== "amendments" && room?.phase !== "done")) return;
+    fetchChat();
+    const t = setInterval(fetchChat, 4000);
+    return () => clearInterval(t);
+  }, [roomId, room?.phase, fetchChat]);
+
+  async function addProposal(index: number, text: string) {
     if (!roomId || !playerId || !text.trim()) return;
     const res = await fetch("/api/proposals", {
       method: "POST",
@@ -118,22 +132,36 @@ function RoomPageContent() {
       body: JSON.stringify({
         roomId,
         playerId,
-        type,
+        type: "amendment",
         index,
         text: text.trim(),
       }),
     });
     if (!res.ok) return;
-    fetchProposals(type, index);
-    if (type === "article") setNewArticle((a) => ({ ...a, [index]: "" }));
-    if (type === "amendment") setNewAmendment((a) => ({ ...a, [index]: "" }));
+    fetchProposals("amendment", index);
+    setNewAmendment((a) => ({ ...a, [index]: "" }));
   }
 
-  async function vote(
-    type: "article" | "amendment",
-    index: number,
-    value: boolean
-  ) {
+  async function sendChatMessage() {
+    if (!roomId || !playerId || !chatInput.trim() || sendingChat) return;
+    setSendingChat(true);
+    try {
+      const res = await fetch(`/api/room/${roomId}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playerId, text: chatInput.trim() }),
+      });
+      if (res.ok) {
+        const msg = await res.json();
+        setChatMessages((m) => [...m, msg]);
+        setChatInput("");
+      }
+    } finally {
+      setSendingChat(false);
+    }
+  }
+
+  async function vote(type: "amendment", index: number, value: boolean) {
     if (!roomId || !playerId) return;
     const key = `${type}-${index}`;
     if (votingKey === key) return;
@@ -161,18 +189,7 @@ function RoomPageContent() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Erreur");
       setError("");
-      // Mettre à jour la salle tout de suite avec la réponse (évite tout cache sur le GET)
-      if (data.phase === "amendments" && data.resultArticles) {
-        setRoom((prev) =>
-          prev
-            ? {
-                ...prev,
-                phase: "amendments",
-                resultArticles: data.resultArticles,
-              }
-            : prev
-        );
-      } else if (data.phase === "done") {
+      if (data.phase === "done") {
         setRoom((prev) =>
           prev
             ? {
@@ -280,8 +297,8 @@ function RoomPageContent() {
     );
   }
 
-  const adoptedArticles = room.resultArticles.filter(Boolean) as string[];
   const adoptedAmendments = room.resultAmendments.filter(Boolean) as string[];
+  const showChat = phase === "amendments" || phase === "done";
 
   return (
     <div className="min-h-screen p-6 pb-20 bg-gradient-to-b from-slate-900 to-slate-950">
@@ -296,57 +313,17 @@ function RoomPageContent() {
           </span>
         </div>
         <span className="text-slate-400">
-          Phase :{" "}
-          {phase === "articles"
-            ? "Articles"
-            : phase === "amendments"
-              ? "Amendements"
-              : "Terminé"}
+          Phase : {phase === "amendments" ? "Amendements" : "Terminé"}
         </span>
       </header>
 
-      <div className="max-w-3xl mx-auto space-y-8">
+      <div className={`mx-auto space-y-8 ${showChat ? "max-w-3xl flex flex-col lg:flex-row lg:items-start gap-8" : "max-w-3xl"}`}>
         {error && (
           <div className="rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 text-sm">
             {error}
           </div>
         )}
-        {phase === "articles" && (
-          <section className="space-y-8">
-            <h2 className="text-2xl font-semibold">Les 10 articles</h2>
-            <p className="text-slate-400 text-sm">
-              Proposez un texte pour chaque article. La dernière proposition est
-              soumise au vote. Adopté si plus de 50 % de oui.
-            </p>
-            {Array.from({ length: ARTICLES_COUNT }, (_, i) => (
-              <ArticleBlock
-                key={i}
-                index={i}
-                playerId={playerId}
-                proposals={proposals[`article-${i}`] ?? []}
-                myVote={votes[`article-${i}`]}
-                newText={newArticle[i] ?? ""}
-                setNewText={(s) =>
-                  setNewArticle((a) => ({ ...a, [i]: s }))
-                }
-                onPropose={(text) => addProposal("article", i, text)}
-                onVote={(value) => vote("article", i, value)}
-                voting={votingKey === `article-${i}`}
-              />
-            ))}
-            <button
-              type="button"
-              onClick={closePhase}
-              disabled={closing}
-              className="btn btn-secondary w-full"
-            >
-              {closing
-                ? "En cours…"
-                : "Clôturer les articles et passer aux amendements"}
-            </button>
-          </section>
-        )}
-
+        <div className={showChat ? "flex-1 min-w-0" : ""}>
         {phase === "amendments" && (
           <section className="space-y-8">
             <h2 className="text-2xl font-semibold">Les 100 amendements</h2>
@@ -365,7 +342,7 @@ function RoomPageContent() {
                 setNewText={(s) =>
                   setNewAmendment((a) => ({ ...a, [i]: s }))
                 }
-                onPropose={(text) => addProposal("amendment", i, text)}
+                onPropose={(text) => addProposal(i, text)}
                 onVote={(value) => vote("amendment", i, value)}
                 voting={votingKey === `amendment-${i}`}
               />
@@ -398,18 +375,6 @@ function RoomPageContent() {
                 </p>
               </div>
             )}
-            {adoptedArticles.length > 0 && (
-              <div>
-                <h3 className="text-lg font-semibold mb-2">Articles adoptés</h3>
-                <ol className="list-decimal list-inside space-y-2">
-                  {adoptedArticles.map((text, i) => (
-                    <li key={i} className="text-slate-200">
-                      {text}
-                    </li>
-                  ))}
-                </ol>
-              </div>
-            )}
             {adoptedAmendments.length > 0 && (
               <div>
                 <h3 className="text-lg font-semibold mb-2">
@@ -424,12 +389,48 @@ function RoomPageContent() {
                 </ol>
               </div>
             )}
-            {adoptedArticles.length === 0 && adoptedAmendments.length === 0 && (
-              <p className="text-slate-500">
-                Aucun article ni amendement adopté.
-              </p>
+            {adoptedAmendments.length === 0 && (
+              <p className="text-slate-500">Aucun amendement adopté.</p>
             )}
           </section>
+        )}
+        </div>
+
+        {showChat && (
+          <aside className="card w-full lg:w-80 flex-shrink-0 flex flex-col max-h-[28rem]">
+            <h3 className="font-semibold mb-2 text-slate-200">Chat</h3>
+            <div className="flex-1 overflow-y-auto space-y-2 mb-3 min-h-[8rem]">
+              {chatMessages.length === 0 && (
+                <p className="text-slate-500 text-sm">Aucun message.</p>
+              )}
+              {chatMessages.map((m) => (
+                <div key={m.id} className="text-sm">
+                  <span className="text-slate-400 font-medium">{m.playerName ?? "?"} : </span>
+                  <span className="text-slate-200">{m.text}</span>
+                </div>
+              ))}
+            </div>
+            {playerId && (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Votre message…"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && sendChatMessage()}
+                  className="input flex-1 text-sm py-1.5"
+                />
+                <button
+                  type="button"
+                  onClick={sendChatMessage}
+                  disabled={!chatInput.trim() || sendingChat}
+                  className="btn btn-primary text-sm py-1.5"
+                >
+                  {sendingChat ? "…" : "Envoyer"}
+                </button>
+              </div>
+            )}
+          </aside>
         )}
       </div>
     </div>
@@ -439,82 +440,6 @@ function RoomPageContent() {
 function getLatestProposal(proposals: Proposal[]): Proposal | null {
   if (proposals.length === 0) return null;
   return proposals[proposals.length - 1] ?? null;
-}
-
-function ArticleBlock({
-  index,
-  playerId,
-  proposals,
-  myVote,
-  newText,
-  setNewText,
-  onPropose,
-  onVote,
-  voting,
-}: {
-  index: number;
-  playerId: string;
-  proposals: Proposal[];
-  myVote: boolean | undefined;
-  newText: string;
-  setNewText: (s: string) => void;
-  onPropose: (text: string) => void;
-  onVote: (value: boolean) => void;
-  voting: boolean;
-}) {
-  const latest = getLatestProposal(proposals);
-  return (
-    <div className="card">
-      <h3 className="font-semibold mb-3">Article {index + 1}</h3>
-      {playerId && (
-        <div className="flex gap-2 mb-4">
-          <input
-            type="text"
-            placeholder="Texte de l'article"
-            value={newText}
-            onChange={(e) => setNewText(e.target.value)}
-            className="input flex-1"
-          />
-          <button
-            type="button"
-            onClick={() => onPropose(newText)}
-            disabled={!newText.trim()}
-            className="btn btn-primary"
-          >
-            Proposer
-          </button>
-        </div>
-      )}
-      {latest ? (
-        <div className="bg-slate-800/50 rounded-lg p-3 mb-3">
-          <p className="text-sm text-slate-300 mb-2">Texte soumis au vote :</p>
-          <p className="text-slate-200">{latest.text}</p>
-          {playerId && (
-            <div className="flex gap-2 mt-3">
-              <button
-                type="button"
-                onClick={() => onVote(true)}
-                disabled={voting}
-                className={`btn text-sm ${myVote === true ? "btn-primary" : "btn-secondary"}`}
-              >
-                {voting ? "…" : myVote === true ? "✓ Oui" : "Oui"}
-              </button>
-              <button
-                type="button"
-                onClick={() => onVote(false)}
-                disabled={voting}
-                className={`btn text-sm ${myVote === false ? "btn-primary" : "btn-secondary"}`}
-              >
-                {voting ? "…" : myVote === false ? "✓ Non" : "Non"}
-              </button>
-            </div>
-          )}
-        </div>
-      ) : (
-        <p className="text-slate-500 text-sm">Aucune proposition pour cet article.</p>
-      )}
-    </div>
-  );
 }
 
 function AmendmentBlock({
