@@ -107,7 +107,6 @@ async function generateCode(): Promise<string> {
 }
 
 export async function createRoom(constitutionName: string, isPublic: boolean = false): Promise<Room> {
-  const id = nanoid();
   const code = await generateCode();
   const name = (constitutionName || "Constitution").toString().trim() || "Constitution";
   const resultAmendments = Array(AMENDMENTS_COUNT).fill(null);
@@ -115,7 +114,6 @@ export async function createRoom(constitutionName: string, isPublic: boolean = f
   const { data, error } = await getSupabase()
     .from("rooms")
     .insert({
-      id,
       code,
       phase: "amendments",
       is_public: isPublic,
@@ -128,13 +126,7 @@ export async function createRoom(constitutionName: string, isPublic: boolean = f
     .single();
 
   if (error) throw error;
-  await getSupabase()
-    .from("rooms")
-    .update({ phase: "amendments" })
-    .eq("id", id)
-    .select("id")
-    .single();
-  return rowToRoom({ ...(data as RoomRow), phase: "amendments" });
+  return rowToRoom(data as RoomRow);
 }
 
 /** Salles publiques avec nombre de participants */

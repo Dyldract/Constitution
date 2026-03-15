@@ -28,9 +28,13 @@ export async function POST(req: Request) {
       playerId: player.id,
     });
   } catch (e) {
+    const err = e as { message?: string; details?: string; code?: string };
+    const msg =
+      err?.message ||
+      (typeof e === "string" ? e : "Impossible de créer la salle");
     console.error("Erreur création salle:", e);
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Impossible de créer la salle" },
+      { error: msg, details: err?.details, code: err?.code },
       { status: 500 }
     );
   }

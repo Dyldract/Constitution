@@ -60,7 +60,10 @@ export default function HomePage() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Erreur lors de la création");
+      if (!res.ok) {
+        const msg = [data.error, data.details].filter(Boolean).join(" — ") || "Erreur lors de la création";
+        throw new Error(msg);
+      }
       
       // Vérifier que les données essentielles sont présentes
       if (!data.roomId) {
@@ -145,9 +148,9 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row p-6 bg-gradient-to-b from-slate-900 to-slate-950 gap-8">
-      {/* Liste des salles publiques à gauche */}
-      <aside className="w-full lg:w-72 flex-shrink-0 order-2 lg:order-1">
+    <div className="min-h-screen p-6 bg-gradient-to-b from-slate-900 to-slate-950 flex flex-col lg:grid lg:grid-cols-[1fr minmax(0,28rem) 1fr] gap-8 items-start lg:items-center">
+      {/* Colonne gauche : salles publiques (desktop) */}
+      <aside className="w-full lg:w-auto order-2 lg:order-1 lg:justify-self-end">
         <h2 className="text-lg font-semibold text-slate-200 mb-3">Salles publiques</h2>
         {publicRooms.length === 0 ? (
           <p className="text-slate-500 text-sm">Aucune salle publique pour le moment.</p>
@@ -201,95 +204,96 @@ export default function HomePage() {
         )}
       </aside>
 
-      <div className="flex-1 flex flex-col items-center justify-center min-w-0 order-1 lg:order-2">
-      <div className="text-center mb-10">
-        <h1 className="text-4xl font-bold text-white mb-2 font-serif">
-          Vote Constitution
-        </h1>
-        <p className="text-slate-400">
-          100 amendements · Vote oui/non · Chat · Préambule généré automatiquement
-        </p>
-      </div>
-
-      <div className="card max-w-md w-full space-y-6">
-        <form onSubmit={handleCreate} className="space-y-2">
-          <label className="block text-sm text-slate-400">
-            Nom de la constitution <span className="text-red-400">*</span>
-          </label>
-          <input
-            type="text"
-            placeholder="Ex: Constitution de la République"
-            value={constitutionName}
-            onChange={(e) => {
-              setConstitutionName(e.target.value);
-              setError("");
-            }}
-            className="input"
-            disabled={creating}
-            autoComplete="off"
-          />
-          <label className="block text-sm text-slate-400">Votre nom (créateur)</label>
-          <input
-            type="text"
-            placeholder="Hôte"
-            value={hostName}
-            onChange={(e) => setHostName(e.target.value)}
-            className="input"
-            disabled={creating}
-            autoComplete="off"
-          />
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={isPublic}
-              onChange={(e) => setIsPublic(e.target.checked)}
-              className="rounded border-slate-600"
-            />
-            <span className="text-sm text-slate-400">Rendre la salle publique (visible dans la liste)</span>
-          </label>
-          <button
-            type="submit"
-            disabled={creating}
-            className="btn btn-primary w-full py-3 text-lg"
-          >
-            {creating ? "Création…" : "Créer une salle"}
-          </button>
-          <p className="text-sm text-slate-400 text-center">
-            Le nom est choisi par vous. Les autres rejoignent avec le code ou via la liste.
+      {/* Zone centrale : formulaire création / rejoindre */}
+      <main className="order-1 lg:order-2 w-full flex flex-col items-center justify-center min-w-0">
+        <div className="text-center mb-10">
+          <h1 className="text-4xl font-bold text-white mb-2 font-serif">
+            Vote Constitution
+          </h1>
+          <p className="text-slate-400">
+            100 amendements · Vote oui/non · Chat · Préambule généré automatiquement
           </p>
-        </form>
-
-        <div className="border-t border-slate-600 pt-6">
-          <p className="text-sm text-slate-400 mb-3 text-center">
-            Déjà un code ?
-          </p>
-          <form onSubmit={handleJoin} className="space-y-3">
-            <input
-              type="text"
-              placeholder="Code (ex: AB12CD)"
-              value={code}
-              onChange={(e) => setCode(e.target.value.toUpperCase())}
-              className="input uppercase tracking-widest text-center"
-              maxLength={6}
-            />
-            <input
-              type="text"
-              placeholder="Votre nom"
-              value={playerName}
-              onChange={(e) => setPlayerName(e.target.value)}
-              className="input"
-            />
-            <button type="submit" className="btn btn-secondary w-full">
-              Rejoindre
-            </button>
-          </form>
         </div>
 
-        {error && (
-          <p className="text-red-400 text-sm text-center">{error}</p>
-        )}
-      </div>
-      </div>
+        <div className="card max-w-md w-full space-y-6">
+          <form onSubmit={handleCreate} className="space-y-2">
+            <label className="block text-sm text-slate-400">
+              Nom de la constitution <span className="text-red-400">*</span>
+            </label>
+            <input
+              type="text"
+              placeholder="Ex: Constitution de la République"
+              value={constitutionName}
+              onChange={(e) => {
+                setConstitutionName(e.target.value);
+                setError("");
+              }}
+              className="input"
+              disabled={creating}
+              autoComplete="off"
+            />
+            <label className="block text-sm text-slate-400">Votre nom (créateur)</label>
+            <input
+              type="text"
+              placeholder="Hôte"
+              value={hostName}
+              onChange={(e) => setHostName(e.target.value)}
+              className="input"
+              disabled={creating}
+              autoComplete="off"
+            />
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isPublic}
+                onChange={(e) => setIsPublic(e.target.checked)}
+                className="rounded border-slate-600"
+              />
+              <span className="text-sm text-slate-400">Rendre la salle publique (visible dans la liste)</span>
+            </label>
+            <button
+              type="submit"
+              disabled={creating}
+              className="btn btn-primary w-full py-3 text-lg"
+            >
+              {creating ? "Création…" : "Créer une salle"}
+            </button>
+            <p className="text-sm text-slate-400 text-center">
+              Le nom est choisi par vous. Les autres rejoignent avec le code ou via la liste.
+            </p>
+          </form>
+
+          <div className="border-t border-slate-600 pt-6">
+            <p className="text-sm text-slate-400 mb-3 text-center">
+              Déjà un code ?
+            </p>
+            <form onSubmit={handleJoin} className="space-y-3">
+              <input
+                type="text"
+                placeholder="Code (ex: AB12CD)"
+                value={code}
+                onChange={(e) => setCode(e.target.value.toUpperCase())}
+                className="input uppercase tracking-widest text-center"
+                maxLength={6}
+              />
+              <input
+                type="text"
+                placeholder="Votre nom"
+                value={playerName}
+                onChange={(e) => setPlayerName(e.target.value)}
+                className="input"
+              />
+              <button type="submit" className="btn btn-secondary w-full">
+                Rejoindre
+              </button>
+            </form>
+          </div>
+
+          {error && (
+            <p className="text-red-400 text-sm text-center">{error}</p>
+          )}
+        </div>
+      </main>
     </div>
   );
 }
