@@ -161,6 +161,14 @@ export async function createRoom(constitutionName: string, isPublic: boolean = f
       .update({ is_public: true })
       .eq("id", room.id);
     if (!updateErr) return { ...room, isPublic: true };
+    // Contournement cache schéma : RPC côté base
+    if (isSchemaCacheError(updateErr)) {
+      const { error: rpcErr } = await getSupabase().rpc("set_room_public", {
+        p_room_id: room.id,
+        p_is_public: true,
+      });
+      if (!rpcErr) return { ...room, isPublic: true };
+    }
   }
   return room;
 }
@@ -175,11 +183,27 @@ export async function getPublicRooms(): Promise<
     .eq("is_public", true)
     .order("created_at", { ascending: false });
   if (roomsError) {
-    if (isSchemaCacheError(roomsError)) return [];
-    throw roomsError;
+    if (!isSchemaCacheError(roomsError)) throw roomsError;
+    // Contournement cache schéma : RPC côté base
+    const { data: rpcRooms, error: rpcError } = await getSupabase().rpc("get_public_rooms");
+    if (rpcError) return [];
+    return mapPublicRooms(Array.isArray(rpcRooms) ? rpcRooms : []);
   }
   if (!rooms?.length) return [];
-  const ids = rooms.map((r: { id: string }) => r.id);
+  return mapPublicRooms(rooms as { id: string; code: string; result_name: string; phase: string }[]);
+}
+
+function mapPublicRooms(
+  rooms: { id: string; code: string; result_name: string; phase: string }[]
+): {
+  id: string;
+  code: string;
+  resultName: string;
+  phase: Room["phase"];
+  playersCount: number;
+}[] {
+  if (!rooms?.length) return [];
+  const ids = rooms.map((r) => r.id);
   const { data: counts } = await getSupabase()
     .from("players")
     .select("room_id")
@@ -190,8 +214,7 @@ export async function getPublicRooms(): Promise<
     const rid = (row as { room_id: string }).room_id;
     if (rid in countByRoom) countByRoom[rid]++;
   }
-  type PublicRoomRow = { id: string; code: string; result_name: string; phase: string };
-  return (rooms as PublicRoomRow[]).map((r) => ({
+  return rooms.map((r) => ({
     id: r.id,
     code: r.code,
     resultName: r.result_name,
