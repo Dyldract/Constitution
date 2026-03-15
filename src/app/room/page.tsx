@@ -301,8 +301,8 @@ function RoomPageContent() {
   const showChat = phase === "amendments" || phase === "done";
 
   return (
-    <div className="min-h-screen p-6 pb-20 bg-gradient-to-b from-slate-900 to-slate-950">
-      <header className="max-w-3xl mx-auto mb-8 flex flex-wrap items-center justify-between gap-4">
+    <div className="min-h-screen p-6 pb-20 bg-gradient-to-b from-slate-900 to-slate-950 flex flex-col items-center">
+      <header className="w-full max-w-4xl mx-auto mb-8 flex flex-wrap items-center justify-between gap-4">
         <Link href="/" className="text-slate-400 hover:text-white">
           ← Accueil
         </Link>
@@ -317,15 +317,15 @@ function RoomPageContent() {
         </span>
       </header>
 
-      <div className={`mx-auto space-y-8 ${showChat ? "max-w-3xl flex flex-col lg:flex-row lg:items-start gap-8" : "max-w-3xl"}`}>
+      <div className={`w-full max-w-4xl mx-auto space-y-8 flex flex-col items-center ${showChat ? "lg:flex-row lg:items-start gap-8" : ""}`}>
         {error && (
           <div className="rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 text-sm">
             {error}
           </div>
         )}
-        <div className={showChat ? "flex-1 min-w-0" : ""}>
+        <div className={`w-full ${showChat ? "flex-1 min-w-0 max-w-3xl" : "max-w-4xl"}`}>
         {phase === "amendments" && (
-          <section className="space-y-8">
+          <section className="space-y-8 w-full">
             <h2 className="text-2xl font-semibold">Les 100 amendements</h2>
             <p className="text-slate-400 text-sm">
               Proposez un texte pour chaque amendement. Vote oui/non. Adopté si
@@ -466,7 +466,7 @@ function AmendmentBlock({
   const [open, setOpen] = useState(false);
   const latest = getLatestProposal(proposals);
   return (
-    <div className="card py-3">
+    <div className="card py-3 w-full">
       <button
         type="button"
         onClick={() => setOpen(!open)}
@@ -478,15 +478,15 @@ function AmendmentBlock({
         </span>
       </button>
       {open && (
-        <div className="mt-4 space-y-2">
+        <div className="mt-4 space-y-2 w-full">
           {playerId && (
-            <div className="flex gap-2">
+            <div className="flex gap-2 w-full">
               <input
                 type="text"
                 placeholder="Texte de l'amendement"
                 value={newText}
                 onChange={(e) => setNewText(e.target.value)}
-                className="input flex-1 text-sm"
+                className="input flex-1 min-w-0 text-sm"
               />
               <button
                 type="button"
@@ -499,9 +499,9 @@ function AmendmentBlock({
             </div>
           )}
           {latest && (
-            <div className="bg-slate-800/50 rounded p-2 text-sm">
+            <div className="bg-slate-800/50 rounded p-3 text-sm w-full">
               <p className="text-slate-300 mb-2">Texte soumis au vote :</p>
-              <p className="text-slate-200 mb-2">{latest.text}</p>
+              <p className="text-slate-200 mb-2 break-words">{latest.text}</p>
               {playerId && (
                 <div className="flex gap-2">
                   <button

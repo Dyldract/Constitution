@@ -30,8 +30,10 @@ type ProposalRow = {
 type VoteRow = {
   id: string;
   room_id: string;
-  player_id: string;
-  type: string;
+  player_id?: string;
+  player_name?: string;
+  proposal_id?: string;
+  type?: string;
   index?: number;
   index_?: number;
   value: boolean;
@@ -83,13 +85,13 @@ function rowToProposal(r: ProposalRow): Proposal {
     createdAt: new Date(r.created_at).getTime(),
   };
 }
-function rowToVote(r: VoteRow): Vote {
-  const idx = r.index ?? r.index_;
+function rowToVote(r: VoteRow, overrides?: { type: ProposalType; index: number; playerId?: string }): Vote {
+  const idx = r.index ?? r.index_ ?? (overrides?.index ?? 0);
   return {
     id: r.id,
     roomId: r.room_id,
-    playerId: r.player_id,
-    type: r.type as Vote["type"],
+    playerId: r.player_id ?? overrides?.playerId ?? "",
+    type: (overrides?.type ?? r.type) as Vote["type"],
     index: typeof idx === "number" ? idx : 0,
     value: r.value,
     createdAt: new Date(r.created_at).getTime(),
@@ -303,6 +305,27 @@ export async function getLatestProposal(
   return list.length > 0 ? list[list.length - 1]! : null;
 }
 
+/** Récupère une proposition par id (pour les votes liés par proposal_id). */
+export async function getProposalById(proposalId: string): Promise<Proposal | null> {
+  const { data, error } = await getSupabase()
+    .from("proposals")
+    .select("*")
+    .eq("id", proposalId)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? rowToProposal(data as ProposalRow) : null;
+}
+
+function isVoteColumnError(err: { message?: string }): boolean {
+  const m = (err?.message ?? "").toLowerCase();
+  return (
+    m.includes("column") ||
+    m.includes("schema cache") ||
+    m.includes("player_id") ||
+    m.includes("proposal_id")
+  );
+}
+
 export async function setVote(
   roomId: string,
   playerId: string,
@@ -313,19 +336,47 @@ export async function setVote(
   const room = await getRoomById(roomId);
   if (!room) throw new Error("Salle introuvable");
 
-  await getSupabase()
+  // Schéma A : player_id, type, index
+  let result = await getSupabase()
     .from("votes")
     .delete()
     .match({ room_id: roomId, player_id: playerId, type, index });
+  if (!result.error) {
+    const ins = await getSupabase()
+      .from("votes")
+      .insert({
+        id: nanoid(),
+        room_id: roomId,
+        player_id: playerId,
+        type,
+        index,
+        value,
+      })
+      .select();
+    if (!ins.error) return;
+    if (!isVoteColumnError(ins.error)) throw ins.error;
+  } else if (!isVoteColumnError(result.error)) throw result.error;
 
-  const { error } = await getSupabase().from("votes").insert({
-    id: nanoid(),
-    room_id: roomId,
-    player_id: playerId,
-    type,
-    index,
-    value,
-  });
+  // Schéma B : proposal_id, player_name
+  const proposal = await getLatestProposal(roomId, type, index);
+  const player = await getPlayer(playerId);
+  if (!proposal) throw new Error("Aucune proposition pour cet amendement");
+  if (!player) throw new Error("Joueur introuvable");
+
+  await getSupabase()
+    .from("votes")
+    .delete()
+    .match({ room_id: roomId, proposal_id: proposal.id, player_name: player.name });
+
+  const { error } = await getSupabase()
+    .from("votes")
+    .insert({
+      room_id: roomId,
+      proposal_id: proposal.id,
+      player_name: player.name,
+      value,
+    })
+    .select();
   if (error) throw error;
 }
 
@@ -334,6 +385,7 @@ export async function getVotes(
   type: Vote["type"],
   index?: number
 ): Promise<Vote[]> {
+  // Schéma A : player_id, type, index
   let query = getSupabase()
     .from("votes")
     .select("*")
@@ -342,19 +394,72 @@ export async function getVotes(
     .order("created_at", { ascending: true });
   if (index !== undefined) query = query.eq("index", index);
   const { data, error } = await query;
-  if (error) throw error;
-  return (data ?? []).map((r) => rowToVote(r as VoteRow));
+  if (!error) return (data ?? []).map((r) => rowToVote(r as VoteRow));
+
+  if (!isVoteColumnError(error)) throw error;
+
+  // Schéma B : proposal_id, player_name — récupérer par proposition
+  if (index === undefined) return [];
+  const proposal = await getLatestProposal(roomId, type, index);
+  if (!proposal) return [];
+  const { data: rows, error: err2 } = await getSupabase()
+    .from("votes")
+    .select("*")
+    .eq("proposal_id", proposal.id)
+    .order("created_at", { ascending: true });
+  if (err2) throw err2;
+  const players = await getPlayersInRoom(roomId);
+  const nameToId: Record<string, string> = {};
+  for (const p of players) nameToId[p.name] = p.id;
+  return (rows ?? []).map((r) => {
+    const row = r as VoteRow;
+    return rowToVote(row, {
+      type: type as ProposalType,
+      index,
+      playerId: row.player_name ? nameToId[row.player_name] : undefined,
+    });
+  });
 }
 
 export async function getVotesByPlayer(roomId: string, playerId: string): Promise<Vote[]> {
+  const player = await getPlayer(playerId);
+  if (!player) return [];
+
+  // Schéma A
   const { data, error } = await getSupabase()
     .from("votes")
     .select("*")
     .eq("room_id", roomId)
     .eq("player_id", playerId)
     .order("created_at", { ascending: true });
-  if (error) throw error;
-  return (data ?? []).map((r) => rowToVote(r as VoteRow));
+  if (!error) return (data ?? []).map((r) => rowToVote(r as VoteRow));
+
+  if (!isVoteColumnError(error)) throw error;
+
+  // Schéma B : proposal_id, player_name
+  const { data: rows, error: err2 } = await getSupabase()
+    .from("votes")
+    .select("*")
+    .eq("room_id", roomId)
+    .eq("player_name", player.name)
+    .order("created_at", { ascending: true });
+  if (err2) throw err2;
+  if (!rows?.length) return [];
+  const out: Vote[] = [];
+  for (const r of rows as VoteRow[]) {
+    const proposalId = r.proposal_id;
+    if (!proposalId) continue;
+    const proposal = await getProposalById(proposalId);
+    if (!proposal) continue;
+    out.push(
+      rowToVote(r, {
+        type: proposal.type as ProposalType,
+        index: proposal.index,
+        playerId,
+      })
+    );
+  }
+  return out;
 }
 
 export async function setRoomPhase(roomId: string, phase: Room["phase"]): Promise<void> {
@@ -390,14 +495,28 @@ export async function setRoomResults(
   if (results.preamble !== undefined) updates.preamble = results.preamble;
   if (Object.keys(updates).length === 0) return;
 
-  const { data, error } = await getSupabase()
+  let result = await getSupabase()
     .from("rooms")
     .update(updates)
     .eq("id", roomId)
     .select("id")
     .single();
-  if (error) throw error;
-  if (!data)
+
+  if (result.error && isSchemaCacheError(result.error)) {
+    const fallback: Record<string, unknown> = {};
+    if (results.resultName !== undefined) fallback.result_name = results.resultName;
+    if (results.preamble !== undefined) fallback.preamble = results.preamble;
+    if (Object.keys(fallback).length > 0) {
+      result = await getSupabase()
+        .from("rooms")
+        .update(fallback)
+        .eq("id", roomId)
+        .select("id")
+        .single();
+    }
+  }
+  if (result.error) throw result.error;
+  if (!result.data)
     throw new Error(
       "Les résultats n'ont pas pu être enregistrés (vérifier les policies RLS sur la table rooms)."
     );

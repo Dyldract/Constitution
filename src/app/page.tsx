@@ -148,9 +148,9 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-screen p-6 bg-gradient-to-b from-slate-900 to-slate-950 flex flex-col lg:grid lg:grid-cols-[1fr minmax(0,28rem) 1fr] gap-8 items-start lg:items-center">
-      {/* Colonne gauche : salles publiques (desktop) */}
-      <aside className="w-full lg:w-auto order-2 lg:order-1 lg:justify-self-end">
+    <div className="min-h-screen flex flex-col lg:flex-row items-center justify-center p-6 gap-8 bg-gradient-to-b from-slate-900 to-slate-950">
+      {/* Salles publiques : à gauche sur desktop (absolute pour ne pas décentrer le formulaire) */}
+      <aside className="w-full lg:w-72 order-1 lg:order-1 lg:absolute lg:left-6 lg:top-1/2 lg:-translate-y-1/2 flex-shrink-0">
         <h2 className="text-lg font-semibold text-slate-200 mb-3">Salles publiques</h2>
         {publicRooms.length === 0 ? (
           <p className="text-slate-500 text-sm">Aucune salle publique pour le moment.</p>
@@ -204,8 +204,8 @@ export default function HomePage() {
         )}
       </aside>
 
-      {/* Zone centrale : formulaire création / rejoindre */}
-      <main className="order-1 lg:order-2 w-full flex flex-col items-center justify-center min-w-0">
+      {/* Zone centrale : formulaire création / rejoindre (toujours centré) */}
+      <main className="order-2 lg:order-2 w-full flex flex-col items-center justify-center min-w-0 max-w-md">
         <div className="text-center mb-10">
           <h1 className="text-4xl font-bold text-white mb-2 font-serif">
             Vote Constitution
