@@ -41,7 +41,14 @@ function RoomPageContent() {
         throw new Error(data.error || "Erreur lors du chargement");
       }
       const data = await res.json();
-      setRoom(data);
+      // Ne pas écraser par une phase "en arrière" (ex. cache renvoie "articles" alors qu'on est en "amendments")
+      setRoom((prev) => {
+        if (!prev) return data;
+        const order = (p: string) =>
+          p === "done" ? 2 : p === "amendments" ? 1 : 0;
+        if (order(data.phase) < order(prev.phase)) return prev;
+        return data;
+      });
       setError("");
       setRoomNotFound(false);
     } catch (e) {
