@@ -514,6 +514,9 @@ export async function setRoomResults(
         .select("id")
         .single();
     }
+    // Si le cache ne connaît que result_amendments/result_articles et pas preamble/result_name,
+    // on ne fait pas échouer : la clôture peut continuer et setRoomPhase passera la phase à "done"
+    if (result.error && isSchemaCacheError(result.error)) return;
   }
   if (result.error) throw result.error;
   if (!result.data)

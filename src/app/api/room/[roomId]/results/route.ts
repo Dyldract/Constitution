@@ -37,14 +37,32 @@ export async function POST(
           resultAmendments.push(null);
         }
       }
-      await setRoomResults(roomId, { resultAmendments });
-      const updatedRoom = await getRoomById(roomId);
-      if (!updatedRoom) {
-        return NextResponse.json({ error: "Salle introuvable" }, { status: 404 });
+      try {
+        await setRoomResults(roomId, { resultAmendments });
+      } catch (e) {
+        console.warn("setRoomResults(resultAmendments) ignoré:", e);
       }
-      const preamble = generatePreamble(updatedRoom);
-      await setRoomResults(roomId, { preamble });
-      await setRoomPhase(roomId, "done");
+      const updatedRoom = await getRoomById(roomId);
+      const roomForPreamble = updatedRoom ?? {
+        ...room,
+        resultAmendments,
+        resultArticles: [],
+      };
+      const preamble = generatePreamble(roomForPreamble);
+      try {
+        await setRoomResults(roomId, { preamble });
+      } catch (e) {
+        console.warn("setRoomResults(preamble) ignoré:", e);
+      }
+      try {
+        await setRoomPhase(roomId, "done");
+      } catch (e) {
+        console.error("setRoomPhase échoué:", e);
+        return NextResponse.json(
+          { error: e instanceof Error ? e.message : "Impossible de passer en phase terminée" },
+          { status: 500 }
+        );
+      }
       return NextResponse.json({
         phase: "done",
         resultAmendments,
