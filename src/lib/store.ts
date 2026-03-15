@@ -106,27 +106,54 @@ async function generateCode(): Promise<string> {
   return code;
 }
 
+/** Détecte si l'erreur vient du cache schéma PostgREST (colonne is_public inconnue) */
+function isSchemaCacheError(err: { message?: string }): boolean {
+  const m = (err?.message ?? "").toLowerCase();
+  return m.includes("schema cache") || m.includes("is_public");
+}
+
 export async function createRoom(constitutionName: string, isPublic: boolean = false): Promise<Room> {
   const code = await generateCode();
   const name = (constitutionName || "Constitution").toString().trim() || "Constitution";
   const resultAmendments = Array(AMENDMENTS_COUNT).fill(null);
 
-  const { data, error } = await getSupabase()
+  const payload = {
+    code,
+    phase: "amendments",
+    result_name: name,
+    result_articles: [],
+    result_amendments: resultAmendments,
+    preamble: null,
+  };
+
+  // Essai avec is_public (comportement normal)
+  let result = await getSupabase()
     .from("rooms")
-    .insert({
-      code,
-      phase: "amendments",
-      is_public: isPublic,
-      result_name: name,
-      result_articles: [],
-      result_amendments: resultAmendments,
-      preamble: null,
-    })
+    .insert({ ...payload, is_public: isPublic })
     .select()
     .single();
 
-  if (error) throw error;
-  return rowToRoom(data as RoomRow);
+  // Si erreur cache schéma, insérer sans is_public (défaut DB = false) puis mettre à jour
+  if (result.error && isSchemaCacheError(result.error)) {
+    const insertWithout = await getSupabase()
+      .from("rooms")
+      .insert(payload)
+      .select()
+      .single();
+    if (insertWithout.error) throw insertWithout.error;
+    const room = rowToRoom(insertWithout.data as RoomRow);
+    if (isPublic) {
+      const { error: updateErr } = await getSupabase()
+        .from("rooms")
+        .update({ is_public: true })
+        .eq("id", room.id);
+      if (!updateErr) return { ...room, isPublic: true };
+    }
+    return room;
+  }
+
+  if (result.error) throw result.error;
+  return rowToRoom(result.data as RoomRow);
 }
 
 /** Salles publiques avec nombre de participants */
@@ -138,7 +165,10 @@ export async function getPublicRooms(): Promise<
     .select("id, code, result_name, phase")
     .eq("is_public", true)
     .order("created_at", { ascending: false });
-  if (roomsError) throw roomsError;
+  if (roomsError) {
+    if (isSchemaCacheError(roomsError)) return [];
+    throw roomsError;
+  }
   if (!rooms?.length) return [];
   const ids = rooms.map((r: { id: string }) => r.id);
   const { data: counts } = await getSupabase()
