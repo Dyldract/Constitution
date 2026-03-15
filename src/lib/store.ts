@@ -187,21 +187,17 @@ export async function getPublicRooms(): Promise<
     // Contournement cache schéma : RPC côté base
     const { data: rpcRooms, error: rpcError } = await getSupabase().rpc("get_public_rooms");
     if (rpcError) return [];
-    return mapPublicRooms(Array.isArray(rpcRooms) ? rpcRooms : []);
+    return await mapPublicRooms(Array.isArray(rpcRooms) ? rpcRooms : []);
   }
   if (!rooms?.length) return [];
-  return mapPublicRooms(rooms as { id: string; code: string; result_name: string; phase: string }[]);
+  return await mapPublicRooms(rooms as { id: string; code: string; result_name: string; phase: string }[]);
 }
 
-function mapPublicRooms(
+async function mapPublicRooms(
   rooms: { id: string; code: string; result_name: string; phase: string }[]
-): {
-  id: string;
-  code: string;
-  resultName: string;
-  phase: Room["phase"];
-  playersCount: number;
-}[] {
+): Promise<
+  { id: string; code: string; resultName: string; phase: Room["phase"]; playersCount: number }[]
+> {
   if (!rooms?.length) return [];
   const ids = rooms.map((r) => r.id);
   const { data: counts } = await getSupabase()
