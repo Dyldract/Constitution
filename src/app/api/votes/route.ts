@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getRoomById, setVote } from "@/lib/store";
-import type { ProposalType } from "@/lib/types";
+import type { VoteType } from "@/lib/types";
 
 export async function POST(req: Request) {
   try {
@@ -21,7 +21,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "index invalide" }, { status: 400 });
     }
     const voteValue = value === true || value === "true" || value === 1;
-    await setVote(roomId, playerId, type as ProposalType, idx, voteValue);
+    await setVote(roomId, playerId, type as VoteType, idx, voteValue);
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error(e);

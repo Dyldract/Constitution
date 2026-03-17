@@ -1,6 +1,6 @@
 import { nanoid } from "nanoid";
 import { getSupabase } from "./supabase";
-import type { Room, Player, Proposal, Vote, ProposalType, ChatMessage } from "./types";
+import type { Room, Player, Proposal, Vote, ProposalType, VoteType, ChatMessage } from "./types";
 import { AMENDMENTS_COUNT } from "./types";
 
 // Types pour les lignes Supabase (snake_case + index_)
@@ -369,7 +369,7 @@ function isVoteColumnError(err: { message?: string }): boolean {
 export async function setVote(
   roomId: string,
   playerId: string,
-  type: ProposalType,
+  type: VoteType,
   index: number,
   value: boolean
 ): Promise<void> {
@@ -397,7 +397,12 @@ export async function setVote(
     if (!isVoteColumnError(ins.error)) throw ins.error;
   } else if (!isVoteColumnError(result.error)) throw result.error;
 
-  // Schéma B : proposal_id, player_name
+  // Schéma B : proposal_id, player_name (uniquement pour les votes sur amendements)
+  if (type !== "amendment") {
+    // Pour les autres types (ex: close), si on arrive ici c'est qu'il manque des colonnes
+    // spécifiques au schéma A. On s'arrête plutôt que de tenter un fallback incohérent.
+    throw result.error ?? new Error("Schéma de votes incompatible pour ce type");
+  }
   const proposal = await getLatestProposal(roomId, type, index);
   const player = await getPlayer(playerId);
   if (!proposal) throw new Error("Aucune proposition pour cet amendement");

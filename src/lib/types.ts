@@ -1,6 +1,7 @@
 export type Phase = "amendments" | "done";
 
 export type ProposalType = "amendment";
+export type VoteType = ProposalType | "close";
 
 export interface Player {
   id: string;
@@ -26,7 +27,7 @@ export interface Vote {
   id: string;
   roomId: string;
   playerId: string;
-  type: ProposalType;
+  type: VoteType;
   index: number;
   /** true = oui, false = non */
   value: boolean;

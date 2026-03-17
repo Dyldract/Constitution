@@ -14,14 +14,18 @@ function RoomPageContent() {
   const playerId = searchParams.get("playerId") ?? "";
 
   const [room, setRoom] = useState<RoomType | null>(null);
+  const [players, setPlayers] = useState<{ id: string; name: string }[]>([]);
   const [proposals, setProposals] = useState<Record<string, Proposal[]>>({});
   const [votes, setVotes] = useState<Record<string, boolean>>({});
+  const [voteCounts, setVoteCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [roomNotFound, setRoomNotFound] = useState(false);
   const [newAmendment, setNewAmendment] = useState<Record<number, string>>({});
   const [closing, setClosing] = useState(false);
   const [votingKey, setVotingKey] = useState<string | null>(null);
+  const [readyCount, setReadyCount] = useState(0);
+  const [iAmReady, setIAmReady] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [sendingChat, setSendingChat] = useState(false);
@@ -47,9 +51,27 @@ function RoomPageContent() {
       setRoom((prev) => {
         if (!prev) return data;
         const order = (p: string) => (p === "done" ? 2 : 1);
-        if (order(data.phase) < order(prev.phase)) return prev;
-        return data;
+        const next =
+          order(data.phase) < order(prev.phase)
+            ? prev
+            : data;
+        // Si la phase est déjà terminée côté client avec des résultats,
+        // ne pas les effacer si la réponse serveur ne les contient pas encore.
+        if (
+          prev.phase === "done" &&
+          next.phase === "done" &&
+          (next.resultAmendments == null || next.resultAmendments.length === 0) &&
+          prev.resultAmendments?.some((x) => x)
+        ) {
+          return {
+            ...next,
+            resultAmendments: prev.resultAmendments,
+            preamble: prev.preamble ?? next.preamble,
+          };
+        }
+        return next;
       });
+      setPlayers(data.players ?? []);
       setError("");
       setRoomNotFound(false);
     } catch (e) {
@@ -96,6 +118,21 @@ function RoomPageContent() {
       })
       .catch(() => {});
   }, [roomId, playerId]);
+
+  // État "prêt à clôturer" (lecture initiale)
+  useEffect(() => {
+    if (!roomId || !playerId || !room || room.phase !== "amendments") return;
+    fetch(`/api/room/${roomId}/ready?playerId=${playerId}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((data) => {
+        setReadyCount(data.readyCount ?? 0);
+        if (Array.isArray(data.players)) {
+          setPlayers(data.players);
+        }
+        setIAmReady(Boolean(data.myReady));
+      })
+      .catch(() => {});
+  }, [roomId, playerId, room?.phase]);
 
   useEffect(() => {
     if (!room) return;
@@ -172,7 +209,11 @@ function RoomPageContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ roomId, playerId, type, index, value }),
       });
-      if (res.ok) setVotes((v) => ({ ...v, [key]: value }));
+      if (res.ok) {
+        setVotes((v) => ({ ...v, [key]: value }));
+        // Rafraîchir le nombre de votes pour cet amendement
+        fetchVoteCount(index);
+      }
     } finally {
       setVotingKey(null);
     }
@@ -207,6 +248,42 @@ function RoomPageContent() {
       setError(e instanceof Error ? e.message : "Erreur");
     } finally {
       setClosing(false);
+    }
+  }
+
+  async function fetchVoteCount(index: number) {
+    if (!roomId) return;
+    try {
+      const res = await fetch(
+        `/api/votes/list?roomId=${roomId}&type=amendment&index=${index}`,
+        { cache: "no-store" }
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      const count = Array.isArray(data.votes) ? data.votes.length : 0;
+      setVoteCounts((c) => ({ ...c, [`amendment-${index}`]: count }));
+    } catch {
+      // ignore
+    }
+  }
+
+  async function toggleReady() {
+    if (!roomId || !playerId || !room || room.phase !== "amendments") return;
+    try {
+      const res = await fetch(`/api/room/${roomId}/ready`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playerId, ready: !iAmReady }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Erreur");
+      setReadyCount(data.readyCount ?? 0);
+      setIAmReady(Boolean(data.myReady));
+      if (Array.isArray(data.players)) {
+        setPlayers(data.players);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erreur");
     }
   }
 
@@ -299,6 +376,7 @@ function RoomPageContent() {
 
   const adoptedAmendments = room.resultAmendments.filter(Boolean) as string[];
   const showChat = phase === "amendments" || phase === "done";
+  const playersCount = players.length;
 
   return (
     <div className="min-h-screen p-6 pb-20 bg-gradient-to-b from-slate-900 to-slate-950 flex flex-col items-center">
@@ -317,12 +395,32 @@ function RoomPageContent() {
         </span>
       </header>
 
-      <div className={`w-full max-w-4xl mx-auto space-y-8 flex flex-col items-center ${showChat ? "lg:flex-row lg:items-start gap-8" : ""}`}>
+      <div className={`w-full max-w-4xl mx-auto space-y-8 flex flex-col items-start ${showChat ? "lg:flex-row lg:items-start gap-8" : ""}`}>
         {error && (
           <div className="rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 text-sm">
             {error}
           </div>
         )}
+        {/* Liste des joueurs */}
+        {(phase === "amendments" || phase === "done") && (
+          <aside className="card w-full lg:w-60 flex-shrink-0 max-h-[20rem] overflow-y-auto mb-4 lg:mb-0">
+            <h3 className="font-semibold mb-2 text-slate-200">
+              Joueurs ({playersCount})
+            </h3>
+            {playersCount === 0 ? (
+              <p className="text-slate-500 text-sm">Aucun joueur pour le moment.</p>
+            ) : (
+              <ul className="space-y-1 text-sm">
+                {players.map((p) => (
+                  <li key={p.id} className="text-slate-200">
+                    {p.name}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </aside>
+        )}
+
         <div className={`w-full ${showChat ? "flex-1 min-w-0 max-w-3xl" : "max-w-4xl"}`}>
         {phase === "amendments" && (
           <section className="space-y-8 w-full">
@@ -331,6 +429,27 @@ function RoomPageContent() {
               Proposez un texte pour chaque amendement. Vote oui/non. Adopté si
               plus de 50 % de oui.
             </p>
+            {playersCount > 0 && (
+              <div className="rounded-lg border border-slate-700 bg-slate-900/60 p-3 text-sm flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <span className="text-slate-300">
+                  Joueurs prêts à clôturer :{" "}
+                  <span className="font-semibold">
+                    {readyCount} / {playersCount}
+                  </span>
+                </span>
+                {playerId && (
+                  <button
+                    type="button"
+                    onClick={toggleReady}
+                    className={`btn btn-sm ${
+                      iAmReady ? "btn-secondary" : "btn-primary"
+                    }`}
+                  >
+                    {iAmReady ? "Annuler mon accord" : "Je suis prêt à clôturer"}
+                  </button>
+                )}
+              </div>
+            )}
             {Array.from({ length: AMENDMENTS_COUNT }, (_, i) => (
               <AmendmentBlock
                 key={i}
@@ -338,23 +457,28 @@ function RoomPageContent() {
                 playerId={playerId}
                 proposals={proposals[`amendment-${i}`] ?? []}
                 myVote={votes[`amendment-${i}`]}
+                votesCount={voteCounts[`amendment-${i}`] ?? 0}
+                playersCount={playersCount}
                 newText={newAmendment[i] ?? ""}
                 setNewText={(s) =>
                   setNewAmendment((a) => ({ ...a, [i]: s }))
                 }
                 onPropose={(text) => addProposal(i, text)}
                 onVote={(value) => vote("amendment", i, value)}
+                onOpen={() => fetchVoteCount(i)}
                 voting={votingKey === `amendment-${i}`}
               />
             ))}
             <button
               type="button"
               onClick={closePhase}
-              disabled={closing}
+              disabled={closing || playersCount === 0 || readyCount < playersCount}
               className="btn btn-secondary w-full"
             >
               {closing
                 ? "En cours…"
+                : readyCount < playersCount
+                ? "En attente des joueurs pour clôturer"
                 : "Clôturer et générer le préambule"}
             </button>
           </section>
@@ -447,20 +571,26 @@ function AmendmentBlock({
   playerId,
   proposals,
   myVote,
+  votesCount,
+  playersCount,
   newText,
   setNewText,
   onPropose,
   onVote,
+  onOpen,
   voting,
 }: {
   index: number;
   playerId: string;
   proposals: Proposal[];
   myVote: boolean | undefined;
+  votesCount: number;
+  playersCount: number;
   newText: string;
   setNewText: (s: string) => void;
   onPropose: (text: string) => void;
   onVote: (value: boolean) => void;
+  onOpen: () => void;
   voting: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -469,7 +599,11 @@ function AmendmentBlock({
     <div className="card py-3 w-full">
       <button
         type="button"
-        onClick={() => setOpen(!open)}
+        onClick={() => {
+          const next = !open;
+          setOpen(next);
+          if (next) onOpen();
+        }}
         className="w-full flex items-center justify-between text-left"
       >
         <span className="font-medium">Amendement {index + 1}</span>
@@ -502,6 +636,14 @@ function AmendmentBlock({
             <div className="bg-slate-800/50 rounded p-3 text-sm w-full">
               <p className="text-slate-300 mb-2">Texte soumis au vote :</p>
               <p className="text-slate-200 mb-2 break-words">{latest.text}</p>
+              {playersCount > 0 && (
+                <p className="text-slate-400 mb-2">
+                  Votes enregistrés :{" "}
+                  <span className="font-semibold">
+                    {votesCount} / {playersCount}
+                  </span>
+                </p>
+              )}
               {playerId && (
                 <div className="flex gap-2">
                   <button
