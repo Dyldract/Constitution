@@ -149,63 +149,8 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row items-center justify-center p-6 gap-8 bg-gradient-to-b from-slate-900 to-slate-950">
-      {/* Salles publiques : à gauche sur desktop (absolute pour ne pas décentrer le formulaire) */}
-      <aside className="w-full lg:w-72 order-1 lg:order-1 lg:absolute lg:left-6 lg:top-1/2 lg:-translate-y-1/2 flex-shrink-0">
-        <h2 className="text-lg font-semibold text-slate-200 mb-3">Salles publiques</h2>
-        {publicRooms.length === 0 ? (
-          <p className="text-slate-500 text-sm">Aucune salle publique pour le moment.</p>
-        ) : (
-          <ul className="space-y-2">
-            {publicRooms.map((room) => (
-              <li key={room.id} className="card py-3">
-                <div className="flex flex-col gap-2">
-                  <span className="font-medium text-white truncate" title={room.resultName}>
-                    {room.resultName}
-                  </span>
-                  <span className="text-slate-400 text-sm">
-                    {room.playersCount} participant{room.playersCount !== 1 ? "s" : ""}
-                  </span>
-                  {joiningRoomCode === room.code ? (
-                    <form onSubmit={handleJoinPublicRoom} className="flex gap-2 mt-1">
-                      <input
-                        type="text"
-                        placeholder="Votre nom"
-                        value={joinName}
-                        onChange={(e) => setJoinName(e.target.value)}
-                        className="input text-sm py-1.5"
-                        autoFocus
-                      />
-                      <div className="flex gap-1">
-                        <button type="submit" className="btn btn-primary text-sm py-1.5">
-                          OK
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => { setJoiningRoomCode(null); setJoinName(""); setError(""); }}
-                          className="btn btn-secondary text-sm py-1.5"
-                        >
-                          Annuler
-                        </button>
-                      </div>
-                    </form>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setJoiningRoomCode(room.code)}
-                      className="btn btn-secondary text-sm w-full mt-1"
-                    >
-                      Rejoindre
-                    </button>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </aside>
-
-      {/* Zone centrale : formulaire création / rejoindre (toujours centré) */}
-      <main className="order-2 lg:order-2 w-full flex flex-col items-center justify-center min-w-0 max-w-md">
+      {/* Zone centrale : d’abord sur mobile ; desktop : formulaire centré (aside en absolute à gauche) */}
+      <main className="w-full flex flex-col items-center justify-center min-w-0 max-w-md">
         <div className="text-center mb-10">
           <h1 className="text-4xl font-bold text-white mb-2 font-serif">
             Constitution
@@ -294,6 +239,61 @@ export default function HomePage() {
           )}
         </div>
       </main>
+
+      {/* Salles publiques : en bas sur mobile ; à gauche sur desktop */}
+      <aside className="w-full max-w-md mx-auto lg:max-w-none lg:w-72 lg:absolute lg:left-6 lg:top-1/2 lg:-translate-y-1/2 flex-shrink-0 max-lg:mt-8 max-lg:pb-4">
+        <h2 className="text-lg font-semibold text-slate-200 mb-3">Salles publiques</h2>
+        {publicRooms.length === 0 ? (
+          <p className="text-slate-500 text-sm">Aucune salle publique pour le moment.</p>
+        ) : (
+          <ul className="space-y-2">
+            {publicRooms.map((room) => (
+              <li key={room.id} className="card py-3">
+                <div className="flex flex-col gap-2">
+                  <span className="font-medium text-white truncate" title={room.resultName}>
+                    {room.resultName}
+                  </span>
+                  <span className="text-slate-400 text-sm">
+                    {room.playersCount} participant{room.playersCount !== 1 ? "s" : ""}
+                  </span>
+                  {joiningRoomCode === room.code ? (
+                    <form onSubmit={handleJoinPublicRoom} className="flex gap-2 mt-1">
+                      <input
+                        type="text"
+                        placeholder="Votre nom"
+                        value={joinName}
+                        onChange={(e) => setJoinName(e.target.value)}
+                        className="input text-sm py-1.5"
+                        autoFocus
+                      />
+                      <div className="flex gap-1">
+                        <button type="submit" className="btn btn-primary text-sm py-1.5">
+                          OK
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setJoiningRoomCode(null); setJoinName(""); setError(""); }}
+                          className="btn btn-secondary text-sm py-1.5"
+                        >
+                          Annuler
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setJoiningRoomCode(room.code)}
+                      className="btn btn-secondary text-sm w-full mt-1"
+                    >
+                      Rejoindre
+                    </button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </aside>
     </div>
   );
 }
