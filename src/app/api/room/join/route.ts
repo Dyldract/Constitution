@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getRoomByCode, addPlayer } from "@/lib/store";
+import { getRoomByCode, addPlayer, findPlayerInRoomByName } from "@/lib/store";
 
 export async function POST(req: Request) {
   try {
@@ -12,7 +12,15 @@ export async function POST(req: Request) {
     if (!room) {
       return NextResponse.json({ error: "Salle introuvable. Vérifiez le code." }, { status: 404 });
     }
-    const player = await addPlayer(room.id, (playerName || "").toString());
+    const name = (playerName || "").toString().trim();
+    if (!name) {
+      return NextResponse.json({ error: "Nom de joueur requis" }, { status: 400 });
+    }
+
+    // Si un joueur avec ce nom existe déjà dans la salle, on le réutilise
+    const existing = await findPlayerInRoomByName(room.id, name);
+    const player = existing ?? (await addPlayer(room.id, name));
+
     return NextResponse.json({
       roomId: room.id,
       code: room.code,

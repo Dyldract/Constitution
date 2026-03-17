@@ -257,6 +257,27 @@ export async function addPlayer(roomId: string, playerName: string): Promise<Pla
   return rowToPlayer(data as PlayerRow);
 }
 
+/** Cherche un joueur dans une salle à partir de son nom (insensible à la casse et aux espaces). */
+export async function findPlayerInRoomByName(
+  roomId: string,
+  playerName: string
+): Promise<Player | null> {
+  const name = (playerName || "").toString().trim();
+  if (!name) return null;
+  const { data, error } = await getSupabase()
+    .from("players")
+    .select("*")
+    .eq("room_id", roomId)
+    .ilike("name", name);
+  if (error) throw error;
+  if (!data || data.length === 0) return null;
+  // Si plusieurs lignes (doublons historiques), on prend la plus ancienne (joined_at le plus ancien)
+  const rows = (data as PlayerRow[]).slice().sort((a, b) =>
+    a.joined_at.localeCompare(b.joined_at)
+  );
+  return rowToPlayer(rows[0]);
+}
+
 export async function getPlayersInRoom(roomId: string): Promise<Player[]> {
   const { data, error } = await getSupabase()
     .from("players")
