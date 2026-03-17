@@ -398,18 +398,22 @@ function RoomPageContent() {
       <div
         className={`w-full mx-auto space-y-8 flex flex-col items-start ${
           showChat
-            ? "lg:grid lg:grid-cols-[15%_40%_1fr] lg:items-start lg:gap-6"
+            ? "lg:grid lg:grid-cols-[15%_minmax(0,1fr)_30%] lg:items-start lg:gap-6"
             : ""
         }`}
       >
         {error && (
-          <div className="rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 text-sm">
+          <div
+            className={`rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 text-sm ${
+              showChat ? "lg:col-span-3 w-full" : ""
+            }`}
+          >
             {error}
           </div>
         )}
-        {/* Liste des joueurs */}
+        {/* Liste des joueurs — léger décalage vertical pour s’aligner avec la carte Chat */}
         {(phase === "amendments" || phase === "done") && (
-          <aside className="card w-full max-h-[28rem] overflow-y-auto mb-4 lg:mb-0 lg:self-start">
+          <aside className="card w-full max-h-[28rem] overflow-y-auto mb-4 lg:mb-0 lg:self-start lg:mt-7">
             <h3 className="font-semibold mb-2 text-slate-200">
               Joueurs ({playersCount})
             </h3>
