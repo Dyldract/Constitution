@@ -413,7 +413,7 @@ function RoomPageContent() {
         )}
         {/* Liste des joueurs — léger décalage vertical pour s’aligner avec la carte Chat */}
         {(phase === "amendments" || phase === "done") && (
-          <aside className="card w-full max-h-[28rem] overflow-y-auto mb-4 lg:mb-0 lg:self-start lg:mt-7">
+          <aside className="card w-full max-h-[28rem] overflow-y-auto mb-4 lg:mb-0 lg:self-start lg:mt-[2rem]">
             <h3 className="font-semibold mb-2 text-slate-200">
               Joueurs ({playersCount})
             </h3>
