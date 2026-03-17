@@ -396,8 +396,10 @@ function RoomPageContent() {
       </header>
 
       <div
-        className={`w-full max-w-4xl mx-auto space-y-8 flex flex-col items-start ${
-          showChat ? "lg:grid lg:grid-cols-[35%_30%_35%] lg:items-start lg:gap-6" : ""
+        className={`w-full max-w-6xl mx-auto space-y-8 flex flex-col items-start ${
+          showChat
+            ? "lg:grid lg:grid-cols-[260px_minmax(0,30%)_260px] lg:items-start lg:gap-8"
+            : ""
         }`}
       >
         {error && (
