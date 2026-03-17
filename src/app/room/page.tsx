@@ -47,21 +47,52 @@ function RoomPageContent() {
         throw new Error(data.error || "Erreur lors du chargement");
       }
       const data = await res.json();
+      const hasAdoptedAmendments = (arr: unknown): boolean =>
+        Array.isArray(arr) && arr.some((x) => x != null && x !== "");
+
+      const STORAGE_KEY = `vote-constitution-results-${roomId}`;
+
       // Ne pas écraser par une phase "en arrière" (ex. cache renvoie "articles" alors qu'on est en "amendments")
       setRoom((prev) => {
-        if (!prev) return data;
+        if (!prev) {
+          let out = data;
+          if (
+            data.phase === "done" &&
+            !hasAdoptedAmendments(data.resultAmendments) &&
+            typeof window !== "undefined"
+          ) {
+            try {
+              const raw = localStorage.getItem(STORAGE_KEY);
+              if (raw) {
+                const { resultAmendments, preamble } = JSON.parse(raw) as {
+                  resultAmendments?: (string | null)[];
+                  preamble?: string | null;
+                };
+                if (hasAdoptedAmendments(resultAmendments)) {
+                  out = {
+                    ...data,
+                    resultAmendments: resultAmendments ?? [],
+                    preamble: preamble ?? data.preamble,
+                  };
+                }
+              }
+            } catch {
+              /* ignore */
+            }
+          }
+          return out;
+        }
         const order = (p: string) => (p === "done" ? 2 : 1);
         const next =
           order(data.phase) < order(prev.phase)
             ? prev
             : data;
-        // Si la phase est déjà terminée côté client avec des résultats,
-        // ne pas les effacer si la réponse serveur ne les contient pas encore.
+        // Serveur renvoie souvent [null,…] (30 entrées) si result_amendments n'est pas persisté : ne pas écraser les adoptés affichés.
         if (
           prev.phase === "done" &&
           next.phase === "done" &&
-          (next.resultAmendments == null || next.resultAmendments.length === 0) &&
-          prev.resultAmendments?.some((x) => x)
+          hasAdoptedAmendments(prev.resultAmendments) &&
+          !hasAdoptedAmendments(next.resultAmendments)
         ) {
           return {
             ...next,
@@ -241,6 +272,22 @@ function RoomPageContent() {
               }
             : prev
         );
+        const adopted =
+          Array.isArray(data.resultAmendments) &&
+          data.resultAmendments.some((x: unknown) => x != null && x !== "");
+        if (adopted && typeof window !== "undefined") {
+          try {
+            localStorage.setItem(
+              `vote-constitution-results-${roomId}`,
+              JSON.stringify({
+                resultAmendments: data.resultAmendments,
+                preamble: data.preamble ?? null,
+              })
+            );
+          } catch {
+            /* ignore */
+          }
+        }
       }
       // Ne pas appeler fetchRoom() ici : en prod (Vercel) le GET peut être en cache
       // et écraser la phase qu'on vient de mettre à jour. Le polling (3s) resynchronisera.
