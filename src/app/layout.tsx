@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Vote Constitution",
-  description: "Votez ensemble le nom, les 10 articles et les 100 amendements de votre constitution, puis générez le préambule.",
+  description: "Votez ensemble le nom et les 30 amendements de votre constitution, puis générez le préambule.",
 };
 
 export default function RootLayout({

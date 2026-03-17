@@ -211,7 +211,7 @@ export default function HomePage() {
             Vote Constitution
           </h1>
           <p className="text-slate-400">
-            100 amendements · Vote oui/non · Chat · Préambule généré automatiquement
+            30 amendements · Vote oui/non · Chat · Préambule généré automatiquement
           </p>
         </div>
 

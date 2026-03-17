@@ -427,10 +427,10 @@ function RoomPageContent() {
           </aside>
         )}
 
-        <div className={`w-full ${showChat ? "" : "max-w-4xl"}`}>
+        <div className={`w-full ${showChat ? "lg:max-w-none" : "max-w-4xl"}`}>
         {phase === "amendments" && (
           <section className="space-y-8 w-full">
-            <h2 className="text-2xl font-semibold">Les 100 amendements</h2>
+            <h2 className="text-2xl font-semibold">Les 30 amendements</h2>
             <p className="text-slate-400 text-sm">
               Proposez un texte pour chaque amendement. Vote oui/non. Adopté si
               plus de 50 % de oui.
