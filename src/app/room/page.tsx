@@ -395,7 +395,11 @@ function RoomPageContent() {
         </span>
       </header>
 
-      <div className={`w-full max-w-4xl mx-auto space-y-8 flex flex-col items-start ${showChat ? "lg:flex-row lg:items-start lg:justify-between gap-6" : ""}`}>
+      <div
+        className={`w-full max-w-4xl mx-auto space-y-8 flex flex-col items-start ${
+          showChat ? "lg:grid lg:grid-cols-[35%_30%_35%] lg:items-start lg:gap-6" : ""
+        }`}
+      >
         {error && (
           <div className="rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 text-sm">
             {error}
@@ -403,7 +407,7 @@ function RoomPageContent() {
         )}
         {/* Liste des joueurs */}
         {(phase === "amendments" || phase === "done") && (
-          <aside className="card w-full lg:basis-[35%] lg:max-w-xs flex-shrink-0 max-h-[20rem] overflow-y-auto mb-4 lg:mb-0">
+          <aside className="card w-full max-h-[20rem] overflow-y-auto mb-4 lg:mb-0">
             <h3 className="font-semibold mb-2 text-slate-200">
               Joueurs ({playersCount})
             </h3>
@@ -421,7 +425,7 @@ function RoomPageContent() {
           </aside>
         )}
 
-        <div className={`w-full ${showChat ? "lg:basis-[30%] lg:max-w-none" : "max-w-4xl"}`}>
+        <div className={`w-full ${showChat ? "" : "max-w-4xl"}`}>
         {phase === "amendments" && (
           <section className="space-y-8 w-full">
             <h2 className="text-2xl font-semibold">Les 100 amendements</h2>
@@ -521,7 +525,7 @@ function RoomPageContent() {
         </div>
 
         {showChat && (
-          <aside className="card w-full lg:basis-[35%] lg:max-w-xs flex-shrink-0 flex flex-col max-h-[28rem]">
+          <aside className="card w-full flex-shrink-0 flex flex-col max-h-[28rem]">
             <h3 className="font-semibold mb-2 text-slate-200">Chat</h3>
             <div className="flex-1 overflow-y-auto space-y-2 mb-3 min-h-[8rem]">
               {chatMessages.length === 0 && (
