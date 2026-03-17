@@ -398,7 +398,7 @@ function RoomPageContent() {
       <div
         className={`w-full mx-auto space-y-8 flex flex-col items-start ${
           showChat
-            ? "lg:grid lg:grid-cols-[30%_30%_30%] lg:gap-8 lg:justify-center"
+            ? "lg:grid lg:grid-cols-[15%_40%_1fr] lg:items-start lg:gap-6"
             : ""
         }`}
       >
@@ -409,7 +409,7 @@ function RoomPageContent() {
         )}
         {/* Liste des joueurs */}
         {(phase === "amendments" || phase === "done") && (
-          <aside className="card w-full max-h-[20rem] overflow-y-auto mb-4 lg:mb-0 lg:flex lg:flex-col lg:justify-center">
+          <aside className="card w-full max-h-[28rem] overflow-y-auto mb-4 lg:mb-0 lg:self-start">
             <h3 className="font-semibold mb-2 text-slate-200">
               Joueurs ({playersCount})
             </h3>
@@ -428,8 +428,8 @@ function RoomPageContent() {
         )}
 
         <div
-          className={`w-full ${
-            showChat ? "lg:flex lg:flex-col lg:justify-center" : "max-w-4xl"
+          className={`w-full min-w-0 ${
+            showChat ? "lg:flex lg:flex-col lg:justify-center lg:self-stretch" : "max-w-4xl"
           }`}
         >
         {phase === "amendments" && (
@@ -531,7 +531,7 @@ function RoomPageContent() {
         </div>
 
         {showChat && (
-          <aside className="card w-full flex-shrink-0 flex flex-col max-h-[28rem] lg:justify-center">
+          <aside className="card w-full flex-shrink-0 flex flex-col max-h-[28rem] lg:self-start">
             <h3 className="font-semibold mb-2 text-slate-200">Chat</h3>
             <div className="flex-1 overflow-y-auto space-y-2 mb-3 min-h-[8rem]">
               {chatMessages.length === 0 && (
