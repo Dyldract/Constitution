@@ -29,6 +29,13 @@ function RoomPageContent() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [sendingChat, setSendingChat] = useState(false);
+  /** Recalcul serveur : idle → en attente ; server → liste fiable ; error → fallback room */
+  const [adoptedFetchState, setAdoptedFetchState] = useState<
+    "idle" | "server" | "error"
+  >("idle");
+  const [serverAdoptedAmendments, setServerAdoptedAmendments] = useState<
+    string[]
+  >([]);
 
   const fetchRoom = useCallback(async () => {
     if (!roomId || roomNotFound) return;
@@ -113,6 +120,31 @@ function RoomPageContent() {
       setLoading(false);
     }
   }, [roomId, roomNotFound]);
+
+  useEffect(() => {
+    setAdoptedFetchState("idle");
+    setServerAdoptedAmendments([]);
+  }, [roomId]);
+
+  useEffect(() => {
+    if (!roomId || room?.phase !== "done") return;
+    setAdoptedFetchState("idle");
+    let cancelled = false;
+    fetch(`/api/room/${roomId}/adopted-amendments`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("fetch"))))
+      .then((d: { amendments?: string[] }) => {
+        if (!cancelled && Array.isArray(d.amendments)) {
+          setServerAdoptedAmendments(d.amendments);
+          setAdoptedFetchState("server");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setAdoptedFetchState("error");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [roomId, room?.phase]);
 
   const fetchProposals = useCallback(
     async (type: "amendment", index?: number) => {
@@ -421,7 +453,11 @@ function RoomPageContent() {
     );
   }
 
-  const adoptedAmendments = room.resultAmendments.filter(Boolean) as string[];
+  const fromRoomAmendments = room.resultAmendments.filter(Boolean) as string[];
+  const adoptedAmendments =
+    adoptedFetchState === "server"
+      ? serverAdoptedAmendments
+      : fromRoomAmendments;
   const showChat = phase === "amendments" || phase === "done";
   const playersCount = players.length;
 
@@ -546,37 +582,49 @@ function RoomPageContent() {
         )}
 
         {phase === "done" && (
-          <section className="card space-y-8">
+          <section className="card space-y-8 flex flex-col">
             <h2 className="text-2xl font-semibold">
               {room.resultName || "Constitution"}
             </h2>
-            {room.preamble && (
-              <div className="border-l-4 border-blue-600 pl-4 py-2">
-                <h3 className="text-sm font-semibold text-slate-400 mb-2">
-                  Préambule
-                </h3>
-                <p className="whitespace-pre-wrap font-serif text-slate-200">
-                  {room.preamble}
-                </p>
+            <div className="flex flex-col gap-8 lg:contents">
+              {/* Mobile : amendements visibles sans scroller sous un long préambule */}
+              <div className="order-1 lg:order-2 space-y-4">
+                {adoptedFetchState === "idle" &&
+                  fromRoomAmendments.length === 0 && (
+                    <p className="text-slate-500 text-sm">
+                      Chargement des amendements adoptés…
+                    </p>
+                  )}
+                {adoptedAmendments.length > 0 && (
+                  <div>
+                    <h3 className="text-lg font-semibold mb-2">
+                      Amendements adoptés
+                    </h3>
+                    <ol className="list-decimal list-inside space-y-1 max-h-96 overflow-y-auto">
+                      {adoptedAmendments.map((text, i) => (
+                        <li key={i} className="text-slate-300 text-sm">
+                          {text}
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+                {(adoptedFetchState === "server" || adoptedFetchState === "error") &&
+                  adoptedAmendments.length === 0 && (
+                    <p className="text-slate-500">Aucun amendement adopté.</p>
+                  )}
               </div>
-            )}
-            {adoptedAmendments.length > 0 && (
-              <div>
-                <h3 className="text-lg font-semibold mb-2">
-                  Amendements adoptés
-                </h3>
-                <ol className="list-decimal list-inside space-y-1 max-h-96 overflow-y-auto">
-                  {adoptedAmendments.map((text, i) => (
-                    <li key={i} className="text-slate-300 text-sm">
-                      {text}
-                    </li>
-                  ))}
-                </ol>
-              </div>
-            )}
-            {adoptedAmendments.length === 0 && (
-              <p className="text-slate-500">Aucun amendement adopté.</p>
-            )}
+              {room.preamble && (
+                <div className="order-2 lg:order-1 border-l-4 border-blue-600 pl-4 py-2">
+                  <h3 className="text-sm font-semibold text-slate-400 mb-2">
+                    Préambule
+                  </h3>
+                  <p className="whitespace-pre-wrap font-serif text-slate-200">
+                    {room.preamble}
+                  </p>
+                </div>
+              )}
+            </div>
           </section>
         )}
         </div>

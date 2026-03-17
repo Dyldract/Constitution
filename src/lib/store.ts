@@ -345,6 +345,25 @@ export async function getLatestProposal(
   return list.length > 0 ? list[list.length - 1]! : null;
 }
 
+function adoptedByMajority(votes: { value: boolean }[]): boolean {
+  if (votes.length === 0) return false;
+  const yes = votes.filter((v) => v.value).length;
+  return yes / votes.length > 0.5;
+}
+
+/** Recalcule les textes des amendements adoptés (même logique que /results). Utile si result_amendments n’est pas en base. */
+export async function getAdoptedAmendmentTexts(roomId: string): Promise<string[]> {
+  const out: string[] = [];
+  for (let i = 0; i < AMENDMENTS_COUNT; i++) {
+    const proposal = await getLatestProposal(roomId, "amendment", i);
+    const voteList = await getVotes(roomId, "amendment", i);
+    if (proposal && adoptedByMajority(voteList)) {
+      out.push(proposal.text);
+    }
+  }
+  return out;
+}
+
 /** Récupère une proposition par id (pour les votes liés par proposal_id). */
 export async function getProposalById(proposalId: string): Promise<Proposal | null> {
   const { data, error } = await getSupabase()
