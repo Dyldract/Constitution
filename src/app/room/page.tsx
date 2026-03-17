@@ -396,9 +396,9 @@ function RoomPageContent() {
       </header>
 
       <div
-        className={`w-full max-w-6xl mx-auto space-y-8 flex flex-col items-start ${
+        className={`w-full mx-auto space-y-8 flex flex-col items-start ${
           showChat
-            ? "lg:grid lg:grid-cols-[260px_minmax(0,30%)_260px] lg:items-start lg:gap-8"
+            ? "lg:grid lg:grid-cols-[30%_30%_30%] lg:gap-8 lg:justify-center"
             : ""
         }`}
       >
@@ -409,7 +409,7 @@ function RoomPageContent() {
         )}
         {/* Liste des joueurs */}
         {(phase === "amendments" || phase === "done") && (
-          <aside className="card w-full max-h-[20rem] overflow-y-auto mb-4 lg:mb-0">
+          <aside className="card w-full max-h-[20rem] overflow-y-auto mb-4 lg:mb-0 lg:flex lg:flex-col lg:justify-center">
             <h3 className="font-semibold mb-2 text-slate-200">
               Joueurs ({playersCount})
             </h3>
@@ -427,7 +427,11 @@ function RoomPageContent() {
           </aside>
         )}
 
-        <div className={`w-full ${showChat ? "lg:max-w-none" : "max-w-4xl"}`}>
+        <div
+          className={`w-full ${
+            showChat ? "lg:flex lg:flex-col lg:justify-center" : "max-w-4xl"
+          }`}
+        >
         {phase === "amendments" && (
           <section className="space-y-8 w-full">
             <h2 className="text-2xl font-semibold">Les 30 amendements</h2>
@@ -527,7 +531,7 @@ function RoomPageContent() {
         </div>
 
         {showChat && (
-          <aside className="card w-full flex-shrink-0 flex flex-col max-h-[28rem]">
+          <aside className="card w-full flex-shrink-0 flex flex-col max-h-[28rem] lg:justify-center">
             <h3 className="font-semibold mb-2 text-slate-200">Chat</h3>
             <div className="flex-1 overflow-y-auto space-y-2 mb-3 min-h-[8rem]">
               {chatMessages.length === 0 && (
