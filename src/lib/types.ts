@@ -14,7 +14,7 @@ export interface Proposal {
   id: string;
   roomId: string;
   type: ProposalType;
-  /** index 0..99 pour amendment */
+  /** index 0..29 pour amendment */
   index: number;
   text: string;
   authorId: string;
@@ -56,4 +56,4 @@ export interface ChatMessage {
   createdAt: number;
 }
 
-export const AMENDMENTS_COUNT = 100;
+export const AMENDMENTS_COUNT = 30;
