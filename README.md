@@ -1,4 +1,4 @@
-# Vote Constitution
+# Constitution
 
 Application collaborative pour voter ensemble une constitution : **nom**, **10 articles**, **100 amendements**, puis génération automatique du **préambule**.
 

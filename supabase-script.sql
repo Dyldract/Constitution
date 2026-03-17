@@ -1,4 +1,4 @@
--- Script Supabase pour Vote Constitution (bêta)
+-- Script Supabase pour Constitution (bêta)
 -- À exécuter dans Supabase → SQL Editor.
 -- Prérequis : table public.rooms existante (id uuid, code, phase, ...).
 

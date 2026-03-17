@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Vote Constitution",
-  description: "Votez ensemble le nom et les 30 amendements de votre constitution, puis générez le préambule.",
+  title: "Constitution",
+  description:
+    "Proposez et votez ensemble le nom et les 30 amendements de votre constitution, puis générez le préambule.",
 };
 
 export default function RootLayout({

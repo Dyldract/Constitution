@@ -208,7 +208,7 @@ export default function HomePage() {
       <main className="order-2 lg:order-2 w-full flex flex-col items-center justify-center min-w-0 max-w-md">
         <div className="text-center mb-10">
           <h1 className="text-4xl font-bold text-white mb-2 font-serif">
-            Vote Constitution
+            Constitution
           </h1>
           <p className="text-slate-400">
             30 amendements · Vote oui/non · Chat · Préambule généré automatiquement
