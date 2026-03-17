@@ -445,7 +445,8 @@ export async function getVotes(
 
   // Schéma B : proposal_id, player_name — récupérer par proposition
   if (index === undefined) return [];
-  const proposal = await getLatestProposal(roomId, type, index);
+  if (type !== "amendment") return [];
+  const proposal = await getLatestProposal(roomId, "amendment", index);
   if (!proposal) return [];
   const { data: rows, error: err2 } = await getSupabase()
     .from("votes")
