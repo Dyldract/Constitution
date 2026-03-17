@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getRoomById, getVotes, getVotesByPlayer } from "@/lib/store";
-import type { ProposalType } from "@/lib/types";
+import type { ProposalType, VoteType } from "@/lib/types";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -15,7 +15,7 @@ export async function GET(req: Request) {
   if (!room) {
     return NextResponse.json({ error: "Salle introuvable" }, { status: 404 });
   }
-  let list: { type: ProposalType; index: number; value: boolean }[];
+  let list: { type: VoteType; index: number; value: boolean }[];
   if (playerId) {
     list = (await getVotesByPlayer(roomId, playerId)).map((v) => ({
       type: v.type,
