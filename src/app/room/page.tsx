@@ -582,48 +582,45 @@ function RoomPageContent() {
         )}
 
         {phase === "done" && (
-          <section className="card space-y-8 flex flex-col">
+          <section className="card space-y-8">
             <h2 className="text-2xl font-semibold">
               {room.resultName || "Constitution"}
             </h2>
-            <div className="flex flex-col gap-8 lg:contents">
-              {/* Mobile : amendements visibles sans scroller sous un long préambule */}
-              <div className="order-1 lg:order-2 space-y-4">
-                {adoptedFetchState === "idle" &&
-                  fromRoomAmendments.length === 0 && (
-                    <p className="text-slate-500 text-sm">
-                      Chargement des amendements adoptés…
-                    </p>
-                  )}
-                {adoptedAmendments.length > 0 && (
-                  <div>
-                    <h3 className="text-lg font-semibold mb-2">
-                      Amendements adoptés
-                    </h3>
-                    <ol className="list-decimal list-inside space-y-1 max-h-96 overflow-y-auto">
-                      {adoptedAmendments.map((text, i) => (
-                        <li key={i} className="text-slate-300 text-sm">
-                          {text}
-                        </li>
-                      ))}
-                    </ol>
-                  </div>
-                )}
-                {(adoptedFetchState === "server" || adoptedFetchState === "error") &&
-                  adoptedAmendments.length === 0 && (
-                    <p className="text-slate-500">Aucun amendement adopté.</p>
-                  )}
+            {room.preamble && (
+              <div className="border-l-4 border-blue-600 pl-4 py-2">
+                <h3 className="text-sm font-semibold text-slate-400 mb-2">
+                  Préambule
+                </h3>
+                <p className="whitespace-pre-wrap font-serif text-slate-200">
+                  {room.preamble}
+                </p>
               </div>
-              {room.preamble && (
-                <div className="order-2 lg:order-1 border-l-4 border-blue-600 pl-4 py-2">
-                  <h3 className="text-sm font-semibold text-slate-400 mb-2">
-                    Préambule
-                  </h3>
-                  <p className="whitespace-pre-wrap font-serif text-slate-200">
-                    {room.preamble}
+            )}
+            <div className="space-y-4">
+              {adoptedFetchState === "idle" &&
+                fromRoomAmendments.length === 0 && (
+                  <p className="text-slate-500 text-sm">
+                    Chargement des amendements adoptés…
                   </p>
+                )}
+              {adoptedAmendments.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-semibold mb-2">
+                    Amendements adoptés
+                  </h3>
+                  <ol className="list-decimal list-inside space-y-1 max-h-96 overflow-y-auto">
+                    {adoptedAmendments.map((text, i) => (
+                      <li key={i} className="text-slate-300 text-sm">
+                        {text}
+                      </li>
+                    ))}
+                  </ol>
                 </div>
               )}
+              {(adoptedFetchState === "server" || adoptedFetchState === "error") &&
+                adoptedAmendments.length === 0 && (
+                  <p className="text-slate-500">Aucun amendement adopté.</p>
+                )}
             </div>
           </section>
         )}
