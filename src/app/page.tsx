@@ -2,11 +2,14 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { useLocale } from "@/components/LocaleProvider";
 
 type PublicRoom = { id: string; code: string; resultName: string; phase: string; playersCount: number };
 
 export default function HomePage() {
   const router = useRouter();
+  const { t } = useLocale();
   const [creating, setCreating] = useState(false);
   const [code, setCode] = useState("");
   const [playerName, setPlayerName] = useState("");
@@ -24,13 +27,13 @@ export default function HomePage() {
       .then((r) => r.json())
       .then((data) => setPublicRooms(data.rooms ?? []))
       .catch(() => {});
-    const t = setInterval(() => {
+    const timer = setInterval(() => {
       fetch("/api/rooms", { cache: "no-store" })
         .then((r) => r.json())
         .then((data) => setPublicRooms(data.rooms ?? []))
         .catch(() => {});
     }, 8000);
-    return () => clearInterval(t);
+    return () => clearInterval(timer);
   }, []);
 
   async function handleCreate(e: React.FormEvent) {
@@ -39,11 +42,11 @@ export default function HomePage() {
     const name = (constitutionName || "").trim();
     const host = (hostName || "").trim();
     if (!name) {
-      setError("Indiquez le nom de la constitution.");
+      setError(t.home.errorConstitutionName);
       return;
     }
     if (!host) {
-      setError("Indiquez votre nom (créateur).");
+      setError(t.home.errorHostName);
       return;
     }
     createSubmitted.current = true;
@@ -61,23 +64,23 @@ export default function HomePage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        const msg = [data.error, data.details].filter(Boolean).join(" — ") || "Erreur lors de la création";
+        const msg =
+          [data.error, data.details].filter(Boolean).join(" — ") ||
+          t.home.errorCreate;
         throw new Error(msg);
       }
-      
-      // Vérifier que les données essentielles sont présentes
+
       if (!data.roomId) {
-        throw new Error("La salle n'a pas pu être créée correctement");
+        throw new Error(t.home.errorRoomNotCreated);
       }
-      
-      // Attendre un court instant pour s'assurer que la salle est bien créée côté serveur
+
       await new Promise((resolve) => setTimeout(resolve, 100));
-      
+
       const q = new URLSearchParams({ roomId: data.roomId });
       if (data.playerId) q.set("playerId", data.playerId);
       router.push(`/room?${q.toString()}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Impossible de créer la salle");
+      setError(err instanceof Error ? err.message : t.home.errorCreateGeneric);
       createSubmitted.current = false;
     } finally {
       setCreating(false);
@@ -90,11 +93,11 @@ export default function HomePage() {
     const trimmedCode = code.trim();
     const trimmedPlayer = (playerName || "").trim();
     if (!trimmedCode) {
-      setError("Veuillez entrer un code de salle");
+      setError(t.home.errorEnterCode);
       return;
     }
     if (!trimmedPlayer) {
-      setError("Indiquez votre nom de joueur.");
+      setError(t.home.errorPlayerName);
       return;
     }
     try {
@@ -108,20 +111,18 @@ export default function HomePage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || "Erreur lors de la connexion");
+        throw new Error(data.error || t.home.errorJoin);
       }
-      
-      // Vérifier que les données essentielles sont présentes
+
       if (!data.roomId || !data.playerId) {
-        throw new Error("La connexion à la salle a échoué");
+        throw new Error(t.home.errorJoinFailed);
       }
-      
-      // Attendre un court instant pour s'assurer que tout est prêt
+
       await new Promise((resolve) => setTimeout(resolve, 100));
-      
+
       router.push(`/room?roomId=${data.roomId}&playerId=${data.playerId}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Impossible de rejoindre");
+      setError(err instanceof Error ? err.message : t.home.errorJoinGeneric);
     }
   }
 
@@ -137,37 +138,40 @@ export default function HomePage() {
         body: JSON.stringify({ code: joiningRoomCode, playerName: name }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Impossible de rejoindre");
-      if (!data.roomId || !data.playerId) throw new Error("Connexion échouée");
+      if (!res.ok) throw new Error(data.error || t.home.errorJoinGeneric);
+      if (!data.roomId || !data.playerId)
+        throw new Error(t.home.errorConnectionFailed);
       setJoiningRoomCode(null);
       setJoinName("");
       router.push(`/room?roomId=${data.roomId}&playerId=${data.playerId}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Impossible de rejoindre");
+      setError(err instanceof Error ? err.message : t.home.errorJoinGeneric);
     }
   }
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row items-center justify-center p-6 gap-8 bg-gradient-to-b from-slate-900 to-slate-950">
-      {/* Zone centrale : d’abord sur mobile ; desktop : formulaire centré (aside en absolute à gauche) */}
+    <div className="min-h-screen flex flex-col lg:flex-row items-center justify-center p-6 gap-8 bg-gradient-to-b from-slate-900 to-slate-950 relative">
+      <div className="absolute top-4 right-4 z-10">
+        <LanguageSwitcher />
+      </div>
+
       <main className="w-full flex flex-col items-center justify-center min-w-0 max-w-md">
         <div className="text-center mb-10">
           <h1 className="text-4xl font-bold text-white mb-2 font-serif">
             Constitution
           </h1>
-          <p className="text-slate-400">
-            30 amendements · Vote oui/non · Chat · Préambule généré automatiquement
-          </p>
+          <p className="text-slate-400">{t.home.tagline}</p>
         </div>
 
         <div className="card max-w-md w-full space-y-6">
           <form onSubmit={handleCreate} className="space-y-2">
             <label className="block text-sm text-slate-400">
-              Nom de la constitution <span className="text-red-400">*</span>
+              {t.home.constitutionNameLabel}{" "}
+              <span className="text-red-400">*</span>
             </label>
             <input
               type="text"
-              placeholder="Ex: Constitution de la République"
+              placeholder={t.home.constitutionNamePlaceholder}
               value={constitutionName}
               onChange={(e) => {
                 setConstitutionName(e.target.value);
@@ -177,10 +181,12 @@ export default function HomePage() {
               disabled={creating}
               autoComplete="off"
             />
-            <label className="block text-sm text-slate-400">Votre nom (créateur)</label>
+            <label className="block text-sm text-slate-400">
+              {t.home.hostNameLabel}
+            </label>
             <input
               type="text"
-              placeholder="Hôte"
+              placeholder={t.home.hostNamePlaceholder}
               value={hostName}
               onChange={(e) => setHostName(e.target.value)}
               className="input"
@@ -194,28 +200,28 @@ export default function HomePage() {
                 onChange={(e) => setIsPublic(e.target.checked)}
                 className="rounded border-slate-600"
               />
-              <span className="text-sm text-slate-400">Rendre la salle publique (visible dans la liste)</span>
+              <span className="text-sm text-slate-400">{t.home.makePublic}</span>
             </label>
             <button
               type="submit"
               disabled={creating}
               className="btn btn-primary w-full py-3 text-lg"
             >
-              {creating ? "Création…" : "Créer une salle"}
+              {creating ? t.home.creating : t.home.createRoom}
             </button>
             <p className="text-sm text-slate-400 text-center">
-              Le nom est choisi par vous. Les autres rejoignent avec le code ou via la liste.
+              {t.home.createHint}
             </p>
           </form>
 
           <div className="border-t border-slate-600 pt-6">
             <p className="text-sm text-slate-400 mb-3 text-center">
-              Déjà un code ?
+              {t.home.alreadyHaveCode}
             </p>
             <form onSubmit={handleJoin} className="space-y-3">
               <input
                 type="text"
-                placeholder="Code (ex: AB12CD)"
+                placeholder={t.home.codePlaceholder}
                 value={code}
                 onChange={(e) => setCode(e.target.value.toUpperCase())}
                 className="input uppercase tracking-widest text-center"
@@ -223,13 +229,13 @@ export default function HomePage() {
               />
               <input
                 type="text"
-                placeholder="Votre nom"
+                placeholder={t.home.yourName}
                 value={playerName}
                 onChange={(e) => setPlayerName(e.target.value)}
                 className="input"
               />
               <button type="submit" className="btn btn-secondary w-full">
-                Rejoindre
+                {t.home.join}
               </button>
             </form>
           </div>
@@ -240,42 +246,56 @@ export default function HomePage() {
         </div>
       </main>
 
-      {/* Salles publiques : en bas sur mobile ; à gauche sur desktop */}
       <aside className="w-full max-w-md mx-auto lg:max-w-none lg:w-72 lg:absolute lg:left-6 lg:top-1/2 lg:-translate-y-1/2 flex-shrink-0 max-lg:mt-8 max-lg:pb-4">
-        <h2 className="text-lg font-semibold text-slate-200 mb-3">Salles publiques</h2>
+        <h2 className="text-lg font-semibold text-slate-200 mb-3">
+          {t.home.publicRooms}
+        </h2>
         {publicRooms.length === 0 ? (
-          <p className="text-slate-500 text-sm">Aucune salle publique pour le moment.</p>
+          <p className="text-slate-500 text-sm">{t.home.noPublicRooms}</p>
         ) : (
           <ul className="space-y-2">
             {publicRooms.map((room) => (
               <li key={room.id} className="card py-3">
                 <div className="flex flex-col gap-2">
-                  <span className="font-medium text-white truncate" title={room.resultName}>
+                  <span
+                    className="font-medium text-white truncate"
+                    title={room.resultName}
+                  >
                     {room.resultName}
                   </span>
                   <span className="text-slate-400 text-sm">
-                    {room.playersCount} participant{room.playersCount !== 1 ? "s" : ""}
+                    {t.home.participants(room.playersCount)}
                   </span>
                   {joiningRoomCode === room.code ? (
-                    <form onSubmit={handleJoinPublicRoom} className="flex gap-2 mt-1">
+                    <form
+                      onSubmit={handleJoinPublicRoom}
+                      className="flex gap-2 mt-1"
+                    >
                       <input
                         type="text"
-                        placeholder="Votre nom"
+                        placeholder={t.home.yourName}
                         value={joinName}
                         onChange={(e) => setJoinName(e.target.value)}
                         className="input text-sm py-1.5"
                         autoFocus
                       />
                       <div className="flex gap-1">
-                        <button type="submit" className="btn btn-primary text-sm py-1.5">
+                        <button
+                          type="submit"
+                          className="btn btn-primary text-sm py-1.5"
+                        >
                           OK
                         </button>
                         <button
                           type="button"
-                          onClick={() => { setJoiningRoomCode(null); setJoinName(""); setError(""); }}
+                          onClick={() => {
+                            setJoiningRoomCode(null);
+                            setJoinName("");
+                            setError("");
+                          }}
                           className="btn btn-secondary text-sm py-1.5"
                         >
-                          Annuler
+                          {t.home.cancel}
                         </button>
                       </div>
                     </form>
@@ -285,7 +305,7 @@ export default function HomePage() {
                       onClick={() => setJoiningRoomCode(room.code)}
                       className="btn btn-secondary text-sm w-full mt-1"
                     >
-                      Rejoindre
+                      {t.home.join}
                     </button>
                   )}
                 </div>

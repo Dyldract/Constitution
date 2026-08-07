@@ -1,27 +1,33 @@
 import type { Room } from "./types";
+import { DEFAULT_LOCALE, getDictionary, type Locale } from "./i18n";
 
 /**
  * Génère le préambule à partir du nom et des amendements adoptés.
  */
-export function generatePreamble(room: Room): string {
-  const name = room.resultName || "Constitution";
+export function generatePreamble(
+  room: Pick<Room, "resultName" | "resultAmendments">,
+  locale: Locale = DEFAULT_LOCALE
+): string {
+  const t = getDictionary(locale).preamble;
+  const name = room.resultName || t.defaultName;
   const amendments = room.resultAmendments.filter(Boolean) as string[];
 
-  const date = new Date().toLocaleDateString("fr-FR", {
+  const dateLocale = locale === "en" ? "en-US" : "fr-FR";
+  const date = new Date().toLocaleDateString(dateLocale, {
     weekday: "long",
     year: "numeric",
     month: "long",
     day: "numeric",
   });
 
-  const intro = `Le peuple souverain, réuni pour fonder les bases de la nation, proclame solennellement la présente ${name}.`;
+  const intro = t.intro(name);
 
   const amendmentsSummary =
     amendments.length > 0
-      ? `\n\n${amendments.length} amendement${amendments.length > 1 ? "s" : ""} complètent et précisent le cadre constitutionnel, afin d'assurer son adaptation et sa pérennité.`
-      : "\n\nLes amendements adoptés par le peuple en précisent les principes et les modalités.";
+      ? t.amendmentsSummary(amendments.length)
+      : t.amendmentsFallback;
 
-  const closing = `\n\nAdoptée le ${date}, cette constitution est la loi suprême de la nation. En foi de quoi, les représentants du peuple l'ont établie et promulguée.`;
+  const closing = t.closing(date);
 
   return intro + amendmentsSummary + closing;
 }

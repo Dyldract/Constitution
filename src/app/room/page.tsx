@@ -1,10 +1,14 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState, useCallback } from "react";
+import { Suspense, useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { AMENDMENTS_COUNT } from "@/lib/types";
 import type { Room as RoomType, Proposal, ChatMessage } from "@/lib/types";
+import { generatePreamble } from "@/lib/preamble";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { useLocale } from "@/components/LocaleProvider";
+import type { Dictionary } from "@/lib/i18n";
 
 type Phase = RoomType["phase"];
 
@@ -12,6 +16,7 @@ function RoomPageContent() {
   const searchParams = useSearchParams();
   const roomId = searchParams.get("roomId") ?? "";
   const playerId = searchParams.get("playerId") ?? "";
+  const { t, locale } = useLocale();
 
   const [room, setRoom] = useState<RoomType | null>(null);
   const [players, setPlayers] = useState<{ id: string; name: string }[]>([]);
@@ -48,10 +53,10 @@ function RoomPageContent() {
         const data = await res.json().catch(() => ({}));
         if (res.status === 404) {
           setRoomNotFound(true);
-          setError("Salle introuvable. Elle a peut-être été supprimée ou le serveur a redémarré.");
+          setError(t.room.roomNotFound);
           return;
         }
-        throw new Error(data.error || "Erreur lors du chargement");
+        throw new Error(data.error || t.room.errorLoad);
       }
       const data = await res.json();
       const hasAdoptedAmendments = (arr: unknown): boolean =>
@@ -114,12 +119,12 @@ function RoomPageContent() {
       setRoomNotFound(false);
     } catch (e) {
       if (!roomNotFound) {
-        setError(e instanceof Error ? e.message : "Erreur de connexion");
+        setError(e instanceof Error ? e.message : t.room.errorConnection);
       }
     } finally {
       setLoading(false);
     }
-  }, [roomId, roomNotFound]);
+  }, [roomId, roomNotFound, t.room.errorConnection, t.room.errorLoad, t.room.roomNotFound]);
 
   useEffect(() => {
     setAdoptedFetchState("idle");
@@ -164,9 +169,9 @@ function RoomPageContent() {
 
   useEffect(() => {
     fetchRoom();
-    if (roomNotFound) return; // Arrêter le polling si la salle n'existe pas
-    const t = setInterval(fetchRoom, 3000);
-    return () => clearInterval(t);
+    if (roomNotFound) return;
+    const timer = setInterval(fetchRoom, 3000);
+    return () => clearInterval(timer);
   }, [fetchRoom, roomNotFound]);
 
   useEffect(() => {
@@ -182,7 +187,6 @@ function RoomPageContent() {
       .catch(() => {});
   }, [roomId, playerId]);
 
-  // État "prêt à clôturer" (lecture initiale)
   useEffect(() => {
     if (!roomId || !playerId || !room || room.phase !== "amendments") return;
     fetch(`/api/room/${roomId}/ready?playerId=${playerId}`, { cache: "no-store" })
@@ -220,8 +224,8 @@ function RoomPageContent() {
   useEffect(() => {
     if (!roomId || (room?.phase !== "amendments" && room?.phase !== "done")) return;
     fetchChat();
-    const t = setInterval(fetchChat, 4000);
-    return () => clearInterval(t);
+    const timer = setInterval(fetchChat, 4000);
+    return () => clearInterval(timer);
   }, [roomId, room?.phase, fetchChat]);
 
   async function addProposal(index: number, text: string) {
@@ -274,7 +278,6 @@ function RoomPageContent() {
       });
       if (res.ok) {
         setVotes((v) => ({ ...v, [key]: value }));
-        // Rafraîchir le nombre de votes pour cet amendement
         fetchVoteCount(index);
       }
     } finally {
@@ -289,9 +292,11 @@ function RoomPageContent() {
     try {
       const res = await fetch(`/api/room/${roomId}/results`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ locale }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "Erreur");
+      if (!res.ok) throw new Error(data.error || t.room.errorGeneric);
       setError("");
       if (data.phase === "done") {
         setRoom((prev) =>
@@ -321,10 +326,8 @@ function RoomPageContent() {
           }
         }
       }
-      // Ne pas appeler fetchRoom() ici : en prod (Vercel) le GET peut être en cache
-      // et écraser la phase qu'on vient de mettre à jour. Le polling (3s) resynchronisera.
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erreur");
+      setError(e instanceof Error ? e.message : t.room.errorGeneric);
     } finally {
       setClosing(false);
     }
@@ -355,36 +358,57 @@ function RoomPageContent() {
         body: JSON.stringify({ playerId, ready: !iAmReady }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "Erreur");
+      if (!res.ok) throw new Error(data.error || t.room.errorGeneric);
       setReadyCount(data.readyCount ?? 0);
       setIAmReady(Boolean(data.myReady));
       if (Array.isArray(data.players)) {
         setPlayers(data.players);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erreur");
+      setError(e instanceof Error ? e.message : t.room.errorGeneric);
     }
   }
+
+  const fromRoomAmendments = (room?.resultAmendments ?? []).filter(
+    Boolean
+  ) as string[];
+  const adoptedAmendments =
+    adoptedFetchState === "server"
+      ? serverAdoptedAmendments
+      : fromRoomAmendments;
+
+  const displayedPreamble = useMemo(() => {
+    if (!room || room.phase !== "done") return room?.preamble ?? null;
+    return generatePreamble(
+      {
+        resultName: room.resultName,
+        resultAmendments: adoptedAmendments.length
+          ? adoptedAmendments
+          : room.resultAmendments,
+      },
+      locale
+    );
+  }, [room, adoptedAmendments, locale]);
 
   if (loading && !room && !roomNotFound) {
     return (
       <div className="min-h-screen flex items-center justify-center p-6">
-        <p className="text-slate-400">Chargement…</p>
+        <p className="text-slate-400">{t.room.loading}</p>
       </div>
     );
   }
 
   if (roomNotFound || (!loading && !room && error)) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-6">
+      <div className="min-h-screen flex items-center justify-center p-6 relative">
+        <div className="absolute top-4 right-4">
+          <LanguageSwitcher />
+        </div>
         <div className="card text-center max-w-md">
-          <p className="text-red-400 mb-4">{error || "Salle introuvable"}</p>
-          <p className="text-slate-400 text-sm mb-4">
-            Les salles sont stockées en mémoire et peuvent être perdues si le serveur redémarre.
-            Veuillez créer une nouvelle salle.
-          </p>
+          <p className="text-red-400 mb-4">{error || t.room.roomNotFound}</p>
+          <p className="text-slate-400 text-sm mb-4">{t.room.roomLostHint}</p>
           <Link href="/" className="btn btn-secondary">
-            Retour à l&#39;accueil
+            {t.room.backHome}
           </Link>
         </div>
       </div>
@@ -394,7 +418,7 @@ function RoomPageContent() {
   if (!room) {
     return (
       <div className="min-h-screen flex items-center justify-center p-6">
-        <p className="text-slate-400">Chargement…</p>
+        <p className="text-slate-400">{t.room.loading}</p>
       </div>
     );
   }
@@ -403,11 +427,12 @@ function RoomPageContent() {
 
   if (!playerId && phase !== "done") {
     return (
-      <div className="min-h-screen p-6 flex flex-col items-center justify-center">
+      <div className="min-h-screen p-6 flex flex-col items-center justify-center relative">
+        <div className="absolute top-4 right-4">
+          <LanguageSwitcher />
+        </div>
         <div className="card max-w-sm w-full text-center">
-          <p className="text-slate-400 mb-4">
-            Entrez votre nom pour participer aux votes dans cette salle.
-          </p>
+          <p className="text-slate-400 mb-4">{t.room.enterNameToVote}</p>
           <form
             onSubmit={async (e) => {
               e.preventDefault();
@@ -435,29 +460,24 @@ function RoomPageContent() {
             <input
               type="text"
               name="name"
-              placeholder="Votre nom"
+              placeholder={t.room.yourName}
               className="input"
             />
             <button type="submit" className="btn btn-primary w-full">
-              Rejoindre
+              {t.room.join}
             </button>
           </form>
           <Link
             href="/"
             className="block mt-4 text-slate-400 hover:text-white text-sm"
           >
-            Retour à l&#39;accueil
+            {t.room.backHome}
           </Link>
         </div>
       </div>
     );
   }
 
-  const fromRoomAmendments = room.resultAmendments.filter(Boolean) as string[];
-  const adoptedAmendments =
-    adoptedFetchState === "server"
-      ? serverAdoptedAmendments
-      : fromRoomAmendments;
   const showChat = phase === "amendments" || phase === "done";
   const playersCount = players.length;
 
@@ -465,17 +485,23 @@ function RoomPageContent() {
     <div className="min-h-screen p-6 pb-20 bg-gradient-to-b from-slate-900 to-slate-950 flex flex-col items-center">
       <header className="w-full max-w-4xl mx-auto mb-8 flex flex-wrap items-center justify-between gap-4">
         <Link href="/" className="text-slate-400 hover:text-white">
-          ← Accueil
+          {t.room.home}
         </Link>
         <div className="flex items-center gap-4">
-          <span className="text-slate-400">Code :</span>
+          <span className="text-slate-400">{t.room.code}</span>
           <span className="font-mono text-xl font-bold text-white tracking-widest bg-slate-800 px-3 py-1 rounded">
             {room.code}
           </span>
         </div>
-        <span className="text-slate-400">
-          Phase : {phase === "amendments" ? "Amendements" : "Terminé"}
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-slate-400">
+            {t.room.phase}{" "}
+            {phase === "amendments"
+              ? t.room.phaseAmendments
+              : t.room.phaseDone}
+          </span>
+          <LanguageSwitcher />
+        </div>
       </header>
 
       <div
@@ -494,14 +520,13 @@ function RoomPageContent() {
             {error}
           </div>
         )}
-        {/* Liste des joueurs — léger décalage vertical pour s’aligner avec la carte Chat */}
         {(phase === "amendments" || phase === "done") && (
           <aside className="card w-full max-h-[28rem] overflow-y-auto mb-4 lg:mb-0 lg:self-start lg:mt-[2rem]">
             <h3 className="font-semibold mb-2 text-slate-200">
-              Joueurs ({playersCount})
+              {t.room.players(playersCount)}
             </h3>
             {playersCount === 0 ? (
-              <p className="text-slate-500 text-sm">Aucun joueur pour le moment.</p>
+              <p className="text-slate-500 text-sm">{t.room.noPlayers}</p>
             ) : (
               <ul className="space-y-1 text-sm">
                 {players.map((p) => (
@@ -521,15 +546,12 @@ function RoomPageContent() {
         >
         {phase === "amendments" && (
           <section className="space-y-8 w-full">
-            <h2 className="text-2xl font-semibold">Les 30 amendements</h2>
-            <p className="text-slate-400 text-sm">
-              Proposez un texte pour chaque amendement. Vote oui/non. Adopté si
-              plus de 50 % de oui.
-            </p>
+            <h2 className="text-2xl font-semibold">{t.room.amendmentsTitle}</h2>
+            <p className="text-slate-400 text-sm">{t.room.amendmentsHint}</p>
             {playersCount > 0 && (
               <div className="rounded-lg border border-slate-700 bg-slate-900/60 p-3 text-sm flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <span className="text-slate-300">
-                  Joueurs prêts à clôturer :{" "}
+                  {t.room.readyToClose}{" "}
                   <span className="font-semibold">
                     {readyCount} / {playersCount}
                   </span>
@@ -542,7 +564,7 @@ function RoomPageContent() {
                       iAmReady ? "btn-secondary" : "btn-primary"
                     }`}
                   >
-                    {iAmReady ? "Annuler mon accord" : "Je suis prêt à clôturer"}
+                    {iAmReady ? t.room.cancelReady : t.room.iAmReady}
                   </button>
                 )}
               </div>
@@ -564,6 +586,7 @@ function RoomPageContent() {
                 onVote={(value) => vote("amendment", i, value)}
                 onOpen={() => fetchVoteCount(i)}
                 voting={votingKey === `amendment-${i}`}
+                labels={t.room}
               />
             ))}
             <button
@@ -573,10 +596,10 @@ function RoomPageContent() {
               className="btn btn-secondary w-full"
             >
               {closing
-                ? "En cours…"
+                ? t.room.closing
                 : readyCount < playersCount
-                ? "En attente des joueurs pour clôturer"
-                : "Clôturer et générer le préambule"}
+                ? t.room.waitingPlayers
+                : t.room.closeAndGenerate}
             </button>
           </section>
         )}
@@ -586,13 +609,13 @@ function RoomPageContent() {
             <h2 className="text-2xl font-semibold">
               {room.resultName || "Constitution"}
             </h2>
-            {room.preamble && (
+            {displayedPreamble && (
               <div className="border-l-4 border-blue-600 pl-4 py-2">
                 <h3 className="text-sm font-semibold text-slate-400 mb-2">
-                  Préambule
+                  {t.room.preamble}
                 </h3>
                 <p className="whitespace-pre-wrap font-serif text-slate-200">
-                  {room.preamble}
+                  {displayedPreamble}
                 </p>
               </div>
             )}
@@ -600,13 +623,13 @@ function RoomPageContent() {
               {adoptedFetchState === "idle" &&
                 fromRoomAmendments.length === 0 && (
                   <p className="text-slate-500 text-sm">
-                    Chargement des amendements adoptés…
+                    {t.room.loadingAdopted}
                   </p>
                 )}
               {adoptedAmendments.length > 0 && (
                 <div>
                   <h3 className="text-lg font-semibold mb-2">
-                    Amendements adoptés
+                    {t.room.adoptedAmendments}
                   </h3>
                   <ol className="list-decimal list-inside space-y-1 max-h-96 overflow-y-auto">
                     {adoptedAmendments.map((text, i) => (
@@ -619,7 +642,7 @@ function RoomPageContent() {
               )}
               {(adoptedFetchState === "server" || adoptedFetchState === "error") &&
                 adoptedAmendments.length === 0 && (
-                  <p className="text-slate-500">Aucun amendement adopté.</p>
+                  <p className="text-slate-500">{t.room.noAdopted}</p>
                 )}
             </div>
           </section>
@@ -628,10 +651,10 @@ function RoomPageContent() {
 
         {showChat && (
           <aside className="card w-full flex-shrink-0 flex flex-col max-h-[28rem] lg:self-start">
-            <h3 className="font-semibold mb-2 text-slate-200">Chat</h3>
+            <h3 className="font-semibold mb-2 text-slate-200">{t.room.chat}</h3>
             <div className="flex-1 overflow-y-auto space-y-2 mb-3 min-h-[8rem]">
               {chatMessages.length === 0 && (
-                <p className="text-slate-500 text-sm">Aucun message.</p>
+                <p className="text-slate-500 text-sm">{t.room.noMessages}</p>
               )}
               {chatMessages.map((m) => (
                 <div key={m.id} className="text-sm">
@@ -644,7 +667,7 @@ function RoomPageContent() {
               <div className="flex gap-2">
                 <input
                   type="text"
-                  placeholder="Votre message…"
+                  placeholder={t.room.yourMessage}
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && sendChatMessage()}
@@ -656,7 +679,7 @@ function RoomPageContent() {
                   disabled={!chatInput.trim() || sendingChat}
                   className="btn btn-primary text-sm py-1.5"
                 >
-                  {sendingChat ? "…" : "Envoyer"}
+                  {sendingChat ? "…" : t.room.send}
                 </button>
               </div>
             )}
@@ -685,6 +708,7 @@ function AmendmentBlock({
   onVote,
   onOpen,
   voting,
+  labels,
 }: {
   index: number;
   playerId: string;
@@ -698,6 +722,7 @@ function AmendmentBlock({
   onVote: (value: boolean) => void;
   onOpen: () => void;
   voting: boolean;
+  labels: Dictionary["room"];
 }) {
   const [open, setOpen] = useState(false);
   const latest = getLatestProposal(proposals);
@@ -712,9 +737,9 @@ function AmendmentBlock({
         }}
         className="w-full flex items-center justify-between text-left"
       >
-        <span className="font-medium">Amendement {index + 1}</span>
+        <span className="font-medium">{labels.amendment(index + 1)}</span>
         <span className="text-slate-400">
-          {latest ? "Texte proposé" : "Aucune proposition"}
+          {latest ? labels.textProposed : labels.noProposal}
         </span>
       </button>
       {open && (
@@ -723,7 +748,7 @@ function AmendmentBlock({
             <div className="flex gap-2 w-full">
               <input
                 type="text"
-                placeholder="Texte de l'amendement"
+                placeholder={labels.amendmentTextPlaceholder}
                 value={newText}
                 onChange={(e) => setNewText(e.target.value)}
                 className="input flex-1 min-w-0 text-sm"
@@ -734,17 +759,17 @@ function AmendmentBlock({
                 disabled={!newText.trim()}
                 className="btn btn-primary text-sm"
               >
-                Proposer
+                {labels.propose}
               </button>
             </div>
           )}
           {latest && (
             <div className="bg-slate-800/50 rounded p-3 text-sm w-full">
-              <p className="text-slate-300 mb-2">Texte soumis au vote :</p>
+              <p className="text-slate-300 mb-2">{labels.textSubmitted}</p>
               <p className="text-slate-200 mb-2 break-words">{latest.text}</p>
               {playersCount > 0 && (
                 <p className="text-slate-400 mb-2">
-                  Votes enregistrés :{" "}
+                  {labels.votesRecorded}{" "}
                   <span className="font-semibold">
                     {votesCount} / {playersCount}
                   </span>
@@ -758,7 +783,7 @@ function AmendmentBlock({
                     disabled={voting}
                     className={`btn text-sm ${myVote === true ? "btn-primary" : "btn-secondary"}`}
                   >
-                    {voting ? "…" : myVote === true ? "✓ Oui" : "Oui"}
+                    {voting ? "…" : myVote === true ? labels.yesChecked : labels.yes}
                   </button>
                   <button
                     type="button"
@@ -766,7 +791,7 @@ function AmendmentBlock({
                     disabled={voting}
                     className={`btn text-sm ${myVote === false ? "btn-primary" : "btn-secondary"}`}
                   >
-                    {voting ? "…" : myVote === false ? "✓ Non" : "Non"}
+                    {voting ? "…" : myVote === false ? labels.noChecked : labels.no}
                   </button>
                 </div>
               )}
@@ -778,9 +803,14 @@ function AmendmentBlock({
   );
 }
 
+function RoomPageFallback() {
+  const { t } = useLocale();
+  return <div className="p-4 text-center">{t.room.loading}</div>;
+}
+
 export default function RoomPage() {
   return (
-    <Suspense fallback={<div className="p-4 text-center">Chargement…</div>}>
+    <Suspense fallback={<RoomPageFallback />}>
       <RoomPageContent />
     </Suspense>
   );

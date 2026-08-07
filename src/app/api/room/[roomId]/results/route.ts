@@ -8,6 +8,7 @@ import {
 } from "@/lib/store";
 import { generatePreamble } from "@/lib/preamble";
 import { AMENDMENTS_COUNT } from "@/lib/types";
+import { resolveLocale } from "@/lib/i18n";
 
 function isAdopted(votes: { value: boolean }[]): boolean {
   if (votes.length === 0) return false;
@@ -16,11 +17,15 @@ function isAdopted(votes: { value: boolean }[]): boolean {
 }
 
 export async function POST(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ roomId: string }> }
 ) {
   try {
     const { roomId } = await params;
+    const body = await req.json().catch(() => ({}));
+    const locale = resolveLocale(
+      typeof body?.locale === "string" ? body.locale : undefined
+    );
     const room = await getRoomById(roomId);
     if (!room) {
       return NextResponse.json({ error: "Salle introuvable" }, { status: 404 });
@@ -48,7 +53,7 @@ export async function POST(
         resultAmendments,
         resultArticles: [],
       };
-      const preamble = generatePreamble(roomForPreamble);
+      const preamble = generatePreamble(roomForPreamble, locale);
       try {
         await setRoomResults(roomId, { preamble });
       } catch (e) {
